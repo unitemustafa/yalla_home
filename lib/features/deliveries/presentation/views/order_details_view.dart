@@ -1,0 +1,413 @@
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/formatters/app_currency.dart';
+import '../../../../core/icons/app_icons.dart';
+import '../../../../core/presentation/widgets/app_action_button.dart';
+import '../../../../core/presentation/widgets/page_top_bar.dart';
+import '../../domain/courier_order.dart';
+import '../widgets/delivery_confirmation_sheet.dart';
+
+typedef OrderDeliveredHandler =
+    void Function(String orderId, DeliveryConfirmationResult result);
+
+class OrderDetailsView extends StatelessWidget {
+  const OrderDetailsView({super.key, required this.order, this.onDelivered});
+
+  final CourierOrder order;
+  final OrderDeliveredHandler? onDelivered;
+
+  Future<void> _callCustomer(BuildContext context) async {
+    final uri = Uri(scheme: 'tel', path: order.phone);
+    if (!await canLaunchUrl(uri)) {
+      if (!context.mounted) return;
+      _showMessage(context, 'الاتصال غير مدعوم على هذا الجهاز.');
+      return;
+    }
+    await launchUrl(uri);
+  }
+
+  Future<void> _openMap(BuildContext context) async {
+    final query = order.mapQuery ?? order.address;
+    final uri = Uri.https('www.google.com', '/maps/search/', {
+      'api': '1',
+      'query': query,
+    });
+
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!context.mounted) return;
+      _showMessage(context, 'تعذر فتح الخريطة.');
+    }
+  }
+
+  Future<void> _confirmDelivery(BuildContext context) async {
+    final result = await showModalBottomSheet<DeliveryConfirmationResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DeliveryConfirmationSheet(orderId: order.id),
+    );
+
+    if (result == null || !context.mounted) return;
+    onDelivered?.call(order.id, result);
+    _showMessage(context, 'تم تسجيل التسليم بنجاح.');
+    Navigator.pop(context);
+  }
+
+  void _showMessage(BuildContext context, String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final mutedColor = isDark
+        ? Colors.white.withValues(alpha: 0.62)
+        : Colors.black.withValues(alpha: 0.58);
+
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+          children: [
+            PageTopBar(
+              title: 'تفاصيل الطلب',
+              subtitle: order.id,
+              showBackButton: true,
+            ),
+            const SizedBox(height: 14),
+            _OrderHeader(order: order, mutedColor: mutedColor),
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: 'بيانات العميل',
+              children: [
+                _DetailRow(
+                  icon: AppIcons.user,
+                  label: 'الاسم',
+                  value: order.customerName,
+                  mutedColor: mutedColor,
+                ),
+                _DetailRow(
+                  icon: AppIcons.call,
+                  label: 'رقم الهاتف',
+                  value: order.phone,
+                  mutedColor: mutedColor,
+                ),
+                _DetailRow(
+                  icon: AppIcons.location,
+                  label: 'العنوان',
+                  value: order.address,
+                  mutedColor: mutedColor,
+                ),
+                if (order.customerNotes != null)
+                  _DetailRow(
+                    icon: AppIcons.document_text,
+                    label: 'ملاحظة العميل',
+                    value: order.customerNotes!,
+                    mutedColor: mutedColor,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: 'المنتجات',
+              children: [
+                for (final item in order.items) _ProductRow(item: item),
+              ],
+            ),
+            if (order.isDelivered) ...[
+              const SizedBox(height: 12),
+              _DeliveryProofCard(order: order, mutedColor: mutedColor),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _callCustomer(context),
+                    icon: const Icon(AppIcons.call, size: 18),
+                    label: const Text('اتصال'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openMap(context),
+                    icon: const Icon(AppIcons.routing, size: 18),
+                    label: const Text('الخريطة'),
+                  ),
+                ),
+              ],
+            ),
+            if (!order.isDelivered) ...[
+              const SizedBox(height: 12),
+              AppActionButton(
+                label: 'تم التسليم',
+                icon: AppIcons.tick_circle,
+                onPressed: () => _confirmDelivery(context),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OrderHeader extends StatelessWidget {
+  const _OrderHeader({required this.order, required this.mutedColor});
+
+  final CourierOrder order;
+  final Color mutedColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCardColor : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: order.status.color.withValues(alpha: isDark ? 0.18 : 0.10),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(AppIcons.box, color: order.status.color, size: 26),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  order.status.label,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: order.status.color,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '${order.area} • ${AppCurrency.format(order.total)}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: mutedColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            _formatTime(order.expectedDeliveryAt),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(DateTime value) {
+    return '${value.hour.toString().padLeft(2, '0')}:'
+        '${value.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCardColor : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.mutedColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color mutedColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: mutedColor),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 92,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: mutedColor,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductRow extends StatelessWidget {
+  const _ProductRow({required this.item});
+
+  final CourierOrderItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              item.name,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'x${item.quantity}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            AppCurrency.format(item.price * item.quantity),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeliveryProofCard extends StatelessWidget {
+  const _DeliveryProofCard({required this.order, required this.mutedColor});
+
+  final CourierOrder order;
+  final Color mutedColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final proof = order.deliveryProof;
+
+    return _SectionCard(
+      title: 'إثبات التسليم',
+      children: [
+        _DetailRow(
+          icon: AppIcons.calendar,
+          label: 'وقت التسليم',
+          value: _formatDateTime(order.deliveredAt),
+          mutedColor: mutedColor,
+        ),
+        if (order.deliveryNote != null)
+          _DetailRow(
+            icon: AppIcons.document_text,
+            label: 'ملاحظة',
+            value: order.deliveryNote!,
+            mutedColor: mutedColor,
+          ),
+        if (proof == null)
+          Text(
+            'لا توجد صورة مرفوعة.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: mutedColor,
+              fontWeight: FontWeight.w800,
+            ),
+          )
+        else
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.memory(
+              proof.bytes,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: 160,
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _formatDateTime(DateTime? value) {
+    if (value == null) return '--';
+    final day = value.day.toString().padLeft(2, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '$day/$month - $hour:$minute';
+  }
+}
