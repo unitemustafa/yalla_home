@@ -4,7 +4,6 @@ import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
-import '../../../../core/theme/app_theme_controller.dart';
 
 class CourierProfileView extends StatelessWidget {
   const CourierProfileView({
@@ -88,12 +87,6 @@ class CourierProfileView extends StatelessWidget {
                             accentColor: AppColors.success,
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 18),
-                      _SettingsSection(
-                        title: 'إعدادات التطبيق',
-                        isDark: isDark,
-                        children: const [_ThemePreferenceTile()],
                       ),
                       const SizedBox(height: 18),
                       _LogoutButton(
@@ -360,14 +353,12 @@ class _SettingsInfoTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.accentColor,
-    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final Color accentColor;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -382,7 +373,6 @@ class _SettingsInfoTile extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -416,223 +406,6 @@ class _SettingsInfoTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (onTap != null) ...[
-                const SizedBox(width: 8),
-                Icon(Icons.chevron_left_rounded, color: mutedColor, size: 22),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ThemePreferenceTile extends StatelessWidget {
-  const _ThemePreferenceTile();
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: AppThemeController.instance,
-      builder: (context, themeMode, _) {
-        return _SettingsInfoTile(
-          icon: _themeIcon(themeMode),
-          title: 'الثيم',
-          subtitle: _themeLabel(themeMode),
-          accentColor: AppColors.info,
-          onTap: () => _showThemeSheet(context),
-        );
-      },
-    );
-  }
-
-  IconData _themeIcon(ThemeMode themeMode) {
-    return switch (themeMode) {
-      ThemeMode.dark => Icons.dark_mode_rounded,
-      ThemeMode.light => Icons.light_mode_rounded,
-      ThemeMode.system => Icons.brightness_auto_rounded,
-    };
-  }
-
-  String _themeLabel(ThemeMode themeMode) {
-    return switch (themeMode) {
-      ThemeMode.dark => 'الثيم الداكن مفعّل',
-      ThemeMode.light => 'الثيم الفاتح مفعّل',
-      ThemeMode.system => 'يتبع إعدادات النظام',
-    };
-  }
-
-  void _showThemeSheet(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: isDark ? AppColors.darkCardColor : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (sheetContext) {
-        return ValueListenableBuilder<ThemeMode>(
-          valueListenable: AppThemeController.instance,
-          builder: (context, currentMode, _) {
-            return _ThemeSelectionSheet(
-              currentMode: currentMode,
-              onSelected: (mode) {
-                Navigator.pop(sheetContext);
-                AppThemeController.instance.setThemeMode(mode);
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _ThemeSelectionSheet extends StatelessWidget {
-  const _ThemeSelectionSheet({
-    required this.currentMode,
-    required this.onSelected,
-  });
-
-  final ThemeMode currentMode;
-  final ValueChanged<ThemeMode> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 22),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'الثيم',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 12),
-            _ThemeOptionTile(
-              title: 'النظام',
-              subtitle: 'يتبع إعدادات الجهاز تلقائيًا',
-              icon: Icons.brightness_auto_rounded,
-              isSelected: currentMode == ThemeMode.system,
-              onTap: () => onSelected(ThemeMode.system),
-            ),
-            const SizedBox(height: 10),
-            _ThemeOptionTile(
-              title: 'فاتح',
-              subtitle: 'استخدم الواجهة الفاتحة دائمًا',
-              icon: Icons.light_mode_rounded,
-              isSelected: currentMode == ThemeMode.light,
-              onTap: () => onSelected(ThemeMode.light),
-            ),
-            const SizedBox(height: 10),
-            _ThemeOptionTile(
-              title: 'داكن',
-              subtitle: 'استخدم الواجهة الداكنة دائمًا',
-              icon: Icons.dark_mode_rounded,
-              isSelected: currentMode == ThemeMode.dark,
-              onTap: () => onSelected(ThemeMode.dark),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ThemeOptionTile extends StatelessWidget {
-  const _ThemeOptionTile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor = isSelected
-        ? AppColors.primary
-        : isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.05);
-    final backgroundColor = isSelected
-        ? AppColors.primary.withValues(alpha: isDark ? 0.18 : 0.08)
-        : isDark
-        ? AppColors.darkSurface
-        : AppColors.lightSurface;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: borderColor),
-          ),
-          child: Row(
-            children: [
-              _SettingsTileIcon(icon: icon, color: AppColors.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark
-                            ? AppColors.darkTextSecondary
-                            : AppColors.lightTextSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              if (isSelected)
-                const Icon(
-                  AppIcons.tick_circle,
-                  color: AppColors.primary,
-                  size: 20,
-                ),
             ],
           ),
         ),
