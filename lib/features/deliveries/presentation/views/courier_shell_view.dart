@@ -6,9 +6,12 @@ import '../../../../core/routing/app_routes.dart';
 import '../../data/demo_courier_orders.dart';
 import '../../domain/courier_order.dart';
 import '../widgets/delivery_confirmation_sheet.dart';
+import 'courier_notifications_view.dart';
 import 'courier_orders_view.dart';
 import 'courier_profile_view.dart';
 import 'delivered_history_view.dart';
+import 'delivered_summary_view.dart';
+import 'order_details_view.dart';
 
 class CourierShellView extends StatefulWidget {
   const CourierShellView({super.key});
@@ -20,6 +23,7 @@ class CourierShellView extends StatefulWidget {
 class _CourierShellViewState extends State<CourierShellView> {
   late List<CourierOrder> _orders;
   int _selectedIndex = 0;
+  int _unreadNotificationCount = 0;
 
   @override
   void initState() {
@@ -31,8 +35,8 @@ class _CourierShellViewState extends State<CourierShellView> {
     return _orders.where((order) => !order.isDelivered).toList();
   }
 
-  List<CourierOrder> get _deliveredToday {
-    return _orders.where((order) => order.deliveredToday).toList();
+  List<CourierOrder> get _deliveredOrders {
+    return _orders.where((order) => order.isDelivered).toList();
   }
 
   void _markDelivered(String orderId, DeliveryConfirmationResult result) {
@@ -65,10 +69,17 @@ class _CourierShellViewState extends State<CourierShellView> {
   Widget build(BuildContext context) {
     final screens = [
       CourierOrdersView(orders: _activeOrders, onDelivered: _markDelivered),
-      DeliveredHistoryView(orders: _deliveredToday),
+      DeliveredHistoryView(orders: _deliveredOrders),
+      CourierNotificationsView(
+        orders: _orders,
+        onOrderTap: _openOrderDetails,
+        onUnreadCountChanged: _updateUnreadNotificationCount,
+      ),
       CourierProfileView(
         activeOrders: _activeOrders.length,
-        deliveredToday: _deliveredToday.length,
+        deliveredOrders: _deliveredOrders.length,
+        onActiveOrdersTap: () => setState(() => _selectedIndex = 0),
+        onDeliveredSummaryTap: _openDeliveredSummary,
         onLogout: _logout,
       ),
     ];
@@ -79,19 +90,46 @@ class _CourierShellViewState extends State<CourierShellView> {
       ),
       bottomNavigationBar: _CourierBottomNavigationBar(
         selectedIndex: _selectedIndex,
+        notificationBadgeCount: _unreadNotificationCount,
         onSelected: (index) => setState(() => _selectedIndex = index),
       ),
     );
+  }
+
+  void _openDeliveredSummary() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => DeliveredSummaryView(orders: _deliveredOrders),
+      ),
+    );
+  }
+
+  void _openOrderDetails(CourierOrder order) {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            OrderDetailsView(order: order, onDelivered: _markDelivered),
+      ),
+    );
+  }
+
+  void _updateUnreadNotificationCount(int count) {
+    if (_unreadNotificationCount == count) return;
+    setState(() => _unreadNotificationCount = count);
   }
 }
 
 class _CourierBottomNavigationBar extends StatelessWidget {
   const _CourierBottomNavigationBar({
     required this.selectedIndex,
+    required this.notificationBadgeCount,
     required this.onSelected,
   });
 
   final int selectedIndex;
+  final int notificationBadgeCount;
   final ValueChanged<int> onSelected;
 
   static const _items = [
@@ -119,6 +157,16 @@ class _CourierBottomNavigationBar extends StatelessWidget {
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.08)
         : Colors.black.withValues(alpha: 0.06);
+    final navigationItems = [
+      _items[0],
+      _items[1],
+      _NavigationItemData(
+        label: 'الإشعارات',
+        icon: AppIcons.notification,
+        activeIcon: AppIcons.notification_bing,
+      ),
+      _items[2],
+    ];
 
     return SafeArea(
       top: false,
@@ -137,11 +185,12 @@ class _CourierBottomNavigationBar extends StatelessWidget {
           ],
         ),
         child: Row(
-          children: List.generate(_items.length, (index) {
+          children: List.generate(navigationItems.length, (index) {
             return Expanded(
               child: _NavigationBarItem(
-                item: _items[index],
+                item: navigationItems[index],
                 isSelected: selectedIndex == index,
+                badgeCount: index == 2 ? notificationBadgeCount : 0,
                 onTap: () => onSelected(index),
               ),
             );
@@ -156,11 +205,13 @@ class _NavigationBarItem extends StatelessWidget {
   const _NavigationBarItem({
     required this.item,
     required this.isSelected,
+    required this.badgeCount,
     required this.onTap,
   });
 
   final _NavigationItemData item;
   final bool isSelected;
+  final int badgeCount;
   final VoidCallback onTap;
 
   @override
@@ -181,20 +232,55 @@ class _NavigationBarItem extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                width: 52,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: indicatorColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  isSelected ? item.activeIcon : item.icon,
-                  color: labelColor,
-                  size: 22,
-                ),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    width: 52,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: indicatorColor,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      isSelected ? item.activeIcon : item.icon,
+                      color: labelColor,
+                      size: 22,
+                    ),
+                  ),
+                  if (badgeCount > 0)
+                    PositionedDirectional(
+                      top: -4,
+                      end: 5,
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          minWidth: 17,
+                          minHeight: 17,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: Theme.of(context).scaffoldBackgroundColor,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          badgeCount > 9 ? '9+' : '$badgeCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            height: 1,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 5),
               Text(

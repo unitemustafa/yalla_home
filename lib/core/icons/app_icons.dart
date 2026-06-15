@@ -28,6 +28,16 @@ class AppIcons {
     fontFamily: _fontFamily,
     fontPackage: _fontPackage,
   );
+  static const IconData copy = IconData(
+    0xe9ea,
+    fontFamily: _fontFamily,
+    fontPackage: _fontPackage,
+  );
+  static const IconData danger = IconData(
+    0xe9f6,
+    fontFamily: _fontFamily,
+    fontPackage: _fontPackage,
+  );
   static const IconData direct_right = IconData(
     0xea10,
     fontFamily: _fontFamily,
@@ -58,6 +68,11 @@ class AppIcons {
     fontFamily: _fontFamily,
     fontPackage: _fontPackage,
   );
+  static const IconData info_circle = IconData(
+    0xeabf,
+    fontFamily: _fontFamily,
+    fontPackage: _fontPackage,
+  );
   static const IconData location = IconData(
     0xeadd,
     fontFamily: _fontFamily,
@@ -75,6 +90,16 @@ class AppIcons {
   );
   static const IconData password_check = IconData(
     0xeb60,
+    fontFamily: _fontFamily,
+    fontPackage: _fontPackage,
+  );
+  static const IconData notification = IconData(
+    0xeb55,
+    fontFamily: _fontFamily,
+    fontPackage: _fontPackage,
+  );
+  static const IconData notification_bing = IconData(
+    0xeb57,
     fontFamily: _fontFamily,
     fontPackage: _fontPackage,
   );
@@ -105,6 +130,16 @@ class AppIcons {
   );
   static const IconData tick_circle = IconData(
     0xec32,
+    fontFamily: _fontFamily,
+    fontPackage: _fontPackage,
+  );
+  static const IconData warning_2 = IconData(
+    0xec7e,
+    fontFamily: _fontFamily,
+    fontPackage: _fontPackage,
+  );
+  static const IconData trash = IconData(
+    0xec44,
     fontFamily: _fontFamily,
     fontPackage: _fontPackage,
   );

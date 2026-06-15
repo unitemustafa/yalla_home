@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/constants/app_colors.dart';
@@ -6,8 +7,10 @@ import '../../../../core/formatters/app_currency.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/app_action_button.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
+import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 import '../../domain/courier_order.dart';
 import '../widgets/delivery_confirmation_sheet.dart';
+import 'courier_tracking_map_view.dart';
 
 typedef OrderDeliveredHandler =
     void Function(String orderId, DeliveryConfirmationResult result);
@@ -28,17 +31,16 @@ class OrderDetailsView extends StatelessWidget {
     await launchUrl(uri);
   }
 
-  Future<void> _openMap(BuildContext context) async {
-    final query = order.mapQuery ?? order.address;
-    final uri = Uri.https('www.google.com', '/maps/search/', {
-      'api': '1',
-      'query': query,
-    });
-
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (!context.mounted) return;
-      _showMessage(context, 'تعذر فتح الخريطة.');
+  void _openMap(BuildContext context) {
+    if (order.customerLocation == null) {
+      _showMessage(context, 'موقع العميل غير متاح لهذا الطلب.');
+      return;
     }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => CourierTrackingMapView(order: order)),
+    );
   }
 
   Future<void> _confirmDelivery(BuildContext context) async {
@@ -56,9 +58,7 @@ class OrderDetailsView extends StatelessWidget {
   }
 
   void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    CustomSnackBar.showInfo(context: context, title: message);
   }
 
   @override
@@ -89,18 +89,21 @@ class OrderDetailsView extends StatelessWidget {
                   label: 'الاسم',
                   value: order.customerName,
                   mutedColor: mutedColor,
+                  copyable: true,
                 ),
                 _DetailRow(
                   icon: AppIcons.call,
                   label: 'رقم الهاتف',
                   value: order.phone,
                   mutedColor: mutedColor,
+                  copyable: true,
                 ),
                 _DetailRow(
                   icon: AppIcons.location,
                   label: 'العنوان',
                   value: order.address,
                   mutedColor: mutedColor,
+                  copyable: true,
                 ),
                 if (order.customerNotes != null)
                   _DetailRow(
@@ -108,6 +111,7 @@ class OrderDetailsView extends StatelessWidget {
                     label: 'ملاحظة العميل',
                     value: order.customerNotes!,
                     mutedColor: mutedColor,
+                    copyable: true,
                   ),
               ],
             ),
@@ -212,18 +216,20 @@ class _OrderHeader extends StatelessWidget {
               ],
             ),
           ),
-          Text(
-            _formatTime(order.expectedDeliveryAt),
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-          ),
+          if (order.isDelivered)
+            Text(
+              _formatTime(order.deliveredAt),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
         ],
       ),
     );
   }
 
-  String _formatTime(DateTime value) {
+  String _formatTime(DateTime? value) {
+    if (value == null) return '--:--';
     return '${value.hour.toString().padLeft(2, '0')}:'
         '${value.minute.toString().padLeft(2, '0')}';
   }
@@ -273,44 +279,70 @@ class _DetailRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.mutedColor,
+    this.copyable = false,
   });
 
   final IconData icon;
   final String label;
   final String value;
   final Color mutedColor;
+  final bool copyable;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: mutedColor),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 92,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: mutedColor,
-                fontWeight: FontWeight.w800,
-              ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: copyable ? () => _copyValue(context) : null,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: copyable ? 4 : 0,
+              vertical: copyable ? 4 : 0,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 18, color: mutedColor),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 92,
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: mutedColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    value,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                if (copyable) ...[
+                  const SizedBox(width: 8),
+                  Icon(AppIcons.copy, size: 16, color: mutedColor),
+                ],
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w900),
-            ),
-          ),
-        ],
+        ),
       ),
     );
+  }
+
+  Future<void> _copyValue(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!context.mounted) return;
+    CustomSnackBar.showSuccess(context: context, title: 'تم نسخ $label');
   }
 }
 

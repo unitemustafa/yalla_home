@@ -86,9 +86,10 @@ class _OrdersSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final activeCount = orders.length;
-    final onWayCount = orders
-        .where((order) => order.status == CourierOrderStatus.onTheWay)
+    final assignedCount = orders
+        .where((order) => order.status == CourierOrderStatus.assigned)
         .length;
     final totalValue = orders.fold<double>(
       0,
@@ -96,11 +97,17 @@ class _OrdersSummaryCard extends StatelessWidget {
     );
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
+        color: isDark
+            ? AppColors.darkCardColor
+            : AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.14)),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : AppColors.primary.withValues(alpha: 0.16),
+        ),
       ),
       child: Row(
         children: [
@@ -109,20 +116,23 @@ class _OrdersSummaryCard extends StatelessWidget {
             value: '$activeCount',
             label: 'نشط',
             color: AppColors.primary,
+            isDark: isDark,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           _SummaryPill(
-            icon: AppIcons.truck_fast,
-            value: '$onWayCount',
-            label: 'في الطريق',
-            color: AppColors.warning,
+            icon: AppIcons.box,
+            value: '$assignedCount',
+            label: CourierOrderStatus.assigned.label,
+            color: CourierOrderStatus.assigned.color,
+            isDark: isDark,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           _SummaryPill(
             icon: AppIcons.money_3,
             value: AppCurrency.format(totalValue),
             label: 'القيمة',
             color: AppColors.success,
+            isDark: isDark,
           ),
         ],
       ),
@@ -136,53 +146,66 @@ class _SummaryPill extends StatelessWidget {
     required this.value,
     required this.label,
     required this.color,
+    required this.isDark,
   });
 
   final IconData icon;
   final String value;
   final String label;
   final Color color;
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
+    final labelColor = isDark
+        ? AppColors.darkTextSecondary
+        : AppColors.lightTextSecondary;
+
     return Expanded(
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 72),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: isDark ? 0.13 : 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.12)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: isDark ? 0.18 : 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 18),
             ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
-                ),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Colors.black.withValues(alpha: 0.52),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+            const SizedBox(height: 7),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 1),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: labelColor,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -201,14 +224,6 @@ class _StatusFilters extends StatelessWidget {
       (
         label: CourierOrderStatus.assigned.label,
         status: CourierOrderStatus.assigned,
-      ),
-      (
-        label: CourierOrderStatus.pickedUp.label,
-        status: CourierOrderStatus.pickedUp,
-      ),
-      (
-        label: CourierOrderStatus.onTheWay.label,
-        status: CourierOrderStatus.onTheWay,
       ),
     ];
 

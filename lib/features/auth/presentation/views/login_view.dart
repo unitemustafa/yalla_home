@@ -18,13 +18,14 @@ class _LoginViewState extends State<LoginView> {
   late final TextEditingController _identifierController;
   late final TextEditingController _passwordController;
   bool _obscurePassword = true;
+  bool _rememberMe = true;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _identifierController = TextEditingController();
-    _passwordController = TextEditingController();
+    _identifierController = TextEditingController(text: 'yalla@admin.com');
+    _passwordController = TextEditingController(text: '01266666610');
   }
 
   @override
@@ -41,12 +42,6 @@ class _LoginViewState extends State<LoginView> {
     await Future<void>.delayed(const Duration(milliseconds: 450));
     if (!mounted) return;
     setState(() => _isLoading = false);
-    _goToDashboard();
-  }
-
-  void _demoLogin() {
-    _identifierController.text = 'courier@yallahome.com';
-    _passwordController.text = 'demo1234';
     _goToDashboard();
   }
 
@@ -156,19 +151,13 @@ class _LoginViewState extends State<LoginView> {
                                 });
                               },
                             ),
-                            const SizedBox(height: 14),
+                            _buildRememberAndSupportRow(theme, isDark),
+                            const SizedBox(height: 30),
                             AppActionButton(
                               label: 'تسجيل الدخول',
                               isLoading: _isLoading,
                               icon: AppIcons.tick_circle,
                               onPressed: _isLoading ? null : _signIn,
-                            ),
-                            const SizedBox(height: 12),
-                            AppActionButton(
-                              label: 'دخول Demo',
-                              variant: AppActionButtonVariant.outlined,
-                              icon: AppIcons.profile_circle,
-                              onPressed: _isLoading ? null : _demoLogin,
                             ),
                           ],
                         ),
@@ -181,6 +170,101 @@ class _LoginViewState extends State<LoginView> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRememberAndSupportRow(ThemeData theme, bool isDark) {
+    final textColor = isDark
+        ? Colors.white.withValues(alpha: 0.88)
+        : Colors.black.withValues(alpha: 0.78);
+    final disabledTextColor = isDark
+        ? Colors.white.withValues(alpha: 0.36)
+        : Colors.black.withValues(alpha: 0.34);
+
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () {
+              setState(() {
+                _rememberMe = !_rememberMe;
+              });
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: _LoginCheckbox(
+                    value: _rememberMe,
+                    onChanged: (value) {
+                      setState(() {
+                        _rememberMe = value ?? false;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    'تذكرني',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: textColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        TextButton(
+          onPressed: null,
+          style: TextButton.styleFrom(
+            disabledForegroundColor: disabledTextColor,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text(
+            'تواصل مع الدعم',
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LoginCheckbox extends StatelessWidget {
+  const _LoginCheckbox({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Checkbox(
+      value: value,
+      onChanged: onChanged,
+      checkColor: Colors.white,
+      side: BorderSide(
+        color: value ? AppColors.primary : AppColors.warning,
+        width: 1.8,
+      ),
+      fillColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return AppColors.primary;
+        }
+
+        return AppColors.warning.withValues(alpha: 0.16);
+      }),
     );
   }
 }

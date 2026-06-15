@@ -21,8 +21,8 @@ class DeliveredHistoryView extends StatelessWidget {
       itemBuilder: (context, index) {
         if (index == 0) {
           return const PageTopBar(
-            title: 'المسلّمة اليوم',
-            subtitle: 'سجل التسليمات وصور الإثبات',
+            title: 'المسلّمة',
+            subtitle: 'سجل الطلبات المسلّمة وصور الإثبات',
           );
         }
 
@@ -80,7 +80,7 @@ class _HistorySummary extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'تم تسليم $count طلب اليوم',
+              'إجمالي الطلبات المسلّمة: $count',
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
@@ -113,7 +113,7 @@ class _EmptyHistoryState extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'لسه مفيش تسليمات اليوم',
+            'لسه مفيش طلبات مسلّمة',
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),

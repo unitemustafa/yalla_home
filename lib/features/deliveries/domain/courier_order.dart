@@ -4,14 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 
-enum CourierOrderStatus { assigned, pickedUp, onTheWay, delivered }
+enum CourierOrderStatus { assigned, delivered }
 
 extension CourierOrderStatusLabel on CourierOrderStatus {
   String get label {
     return switch (this) {
       CourierOrderStatus.assigned => 'مطلوب الاستلام',
-      CourierOrderStatus.pickedUp => 'تم الاستلام',
-      CourierOrderStatus.onTheWay => 'في الطريق',
       CourierOrderStatus.delivered => 'تم التسليم',
     };
   }
@@ -19,8 +17,6 @@ extension CourierOrderStatusLabel on CourierOrderStatus {
   Color get color {
     return switch (this) {
       CourierOrderStatus.assigned => AppColors.info,
-      CourierOrderStatus.pickedUp => AppColors.warning,
-      CourierOrderStatus.onTheWay => AppColors.primary,
       CourierOrderStatus.delivered => AppColors.success,
     };
   }
@@ -31,6 +27,13 @@ class DeliveryProof {
 
   final String fileName;
   final Uint8List bytes;
+}
+
+class OrderLocation {
+  const OrderLocation({required this.latitude, required this.longitude});
+
+  final double latitude;
+  final double longitude;
 }
 
 class CourierOrderItem {
@@ -58,6 +61,7 @@ class CourierOrder {
     required this.expectedDeliveryAt,
     required this.items,
     this.mapQuery,
+    this.customerLocation,
     this.customerNotes,
     this.deliveredAt,
     this.deliveryNote,
@@ -75,6 +79,7 @@ class CourierOrder {
   final DateTime expectedDeliveryAt;
   final List<CourierOrderItem> items;
   final String? mapQuery;
+  final OrderLocation? customerLocation;
   final String? customerNotes;
   final DateTime? deliveredAt;
   final String? deliveryNote;
@@ -85,15 +90,6 @@ class CourierOrder {
   }
 
   bool get isDelivered => status == CourierOrderStatus.delivered;
-
-  bool get deliveredToday {
-    final value = deliveredAt;
-    if (value == null) return false;
-    final now = DateTime.now();
-    return value.year == now.year &&
-        value.month == now.month &&
-        value.day == now.day;
-  }
 
   CourierOrder copyWith({
     CourierOrderStatus? status,
@@ -113,6 +109,7 @@ class CourierOrder {
       expectedDeliveryAt: expectedDeliveryAt,
       items: items,
       mapQuery: mapQuery,
+      customerLocation: customerLocation,
       customerNotes: customerNotes,
       deliveredAt: deliveredAt ?? this.deliveredAt,
       deliveryNote: deliveryNote ?? this.deliveryNote,

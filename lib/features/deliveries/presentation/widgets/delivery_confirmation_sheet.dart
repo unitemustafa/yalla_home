@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/app_action_button.dart';
+import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 import '../../domain/courier_order.dart';
 
 class DeliveryConfirmationResult {
@@ -55,8 +56,9 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
       });
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر اختيار الصورة، حاول مرة أخرى.')),
+      CustomSnackBar.showError(
+        context: context,
+        title: 'تعذر اختيار الصورة، حاول مرة أخرى.',
       );
     } finally {
       if (mounted) setState(() => _isPicking = false);

@@ -28,10 +28,14 @@
 	<array>
 		<string>tel</string>
 	</array>
+	<key>GoogleMapsApiKey</key>
+	<string>$(GOOGLE_MAPS_API_KEY)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>يحتاج التطبيق لاستخدام الكاميرا لرفع صورة إثبات التسليم.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>يحتاج التطبيق لموقعك لعرض مسار التوصيل وتتبع الرحلة داخل الخريطة.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>يحتاج التطبيق للوصول للصور لاختيار إثبات التسليم.</string>
 	<key>UIApplicationSceneManifest</key>

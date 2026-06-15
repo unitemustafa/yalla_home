@@ -4,17 +4,23 @@ import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
+import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
+import '../../../../core/theme/app_theme_controller.dart';
 
 class CourierProfileView extends StatelessWidget {
   const CourierProfileView({
     super.key,
     required this.activeOrders,
-    required this.deliveredToday,
+    required this.deliveredOrders,
+    required this.onActiveOrdersTap,
+    required this.onDeliveredSummaryTap,
     required this.onLogout,
   });
 
   final int activeOrders;
-  final int deliveredToday;
+  final int deliveredOrders;
+  final VoidCallback onActiveOrdersTap;
+  final VoidCallback onDeliveredSummaryTap;
   final VoidCallback onLogout;
 
   @override
@@ -56,15 +62,17 @@ class CourierProfileView extends StatelessWidget {
                               value: '$activeOrders',
                               label: 'طلبات نشطة',
                               color: AppColors.primary,
+                              onTap: onActiveOrdersTap,
                             ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: _CourierStat(
                               icon: AppIcons.tick_circle,
-                              value: '$deliveredToday',
-                              label: 'تسليم اليوم',
+                              value: '$deliveredOrders',
+                              label: 'إجمالي التسليم',
                               color: AppColors.success,
+                              onTap: onDeliveredSummaryTap,
                             ),
                           ),
                         ],
@@ -73,19 +81,15 @@ class CourierProfileView extends StatelessWidget {
                       _SettingsSection(
                         title: 'إعدادات التشغيل',
                         isDark: isDark,
-                        children: const [
-                          _SettingsInfoTile(
-                            icon: AppIcons.setting_2,
-                            title: 'وضع التشغيل',
-                            subtitle: 'Demo بدون باك إند',
-                            accentColor: AppColors.primary,
-                          ),
-                          _SettingsInfoTile(
+                        children: [
+                          const _SettingsInfoTile(
                             icon: AppIcons.location,
                             title: 'منطقة الشيفت',
                             subtitle: 'القاهرة • متاح للتوصيل',
                             accentColor: AppColors.success,
                           ),
+                          _SettingsDivider(isDark: isDark),
+                          const _ThemeModeTile(),
                         ],
                       ),
                       const SizedBox(height: 18),
@@ -254,12 +258,14 @@ class _CourierStat extends StatelessWidget {
     required this.value,
     required this.label,
     required this.color,
+    required this.onTap,
   });
 
   final IconData icon;
   final String value;
   final String label;
   final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -268,40 +274,48 @@ class _CourierStat extends StatelessWidget {
         ? AppColors.darkTextSecondary
         : AppColors.lightTextSecondary;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCardColor : Colors.white,
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.05),
-        ),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: mutedColor,
-              fontWeight: FontWeight.w700,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkCardColor : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-        ],
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 22),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: mutedColor,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -347,17 +361,453 @@ class _SettingsSection extends StatelessWidget {
   }
 }
 
+class _SettingsDivider extends StatelessWidget {
+  const _SettingsDivider({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(
+      height: 1,
+      thickness: 1,
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.black.withValues(alpha: 0.05),
+    );
+  }
+}
+
+class _ThemeModeTile extends _ThemeModeTileBase {
+  const _ThemeModeTile() : super();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppThemeController.instance,
+      builder: (context, mode, _) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final mutedColor = isDark
+            ? AppColors.darkTextSecondary
+            : AppColors.lightTextSecondary;
+
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _showThemeSheet(context),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  _SettingsTileIcon(
+                    icon: _themeModeIcon(mode),
+                    color: _themeModeAccentColor(mode),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'ثيم التطبيق',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _themeModeLabel(mode),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: mutedColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_left_rounded, color: mutedColor, size: 22),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showThemeSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentMode = AppThemeController.instance.value;
+    const themeModes = [ThemeMode.system, ThemeMode.light, ThemeMode.dark];
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: isDark ? AppColors.darkCardColor : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return _ThemeSelectionSheet(
+          title: 'ثيم التطبيق',
+          children: [
+            for (final themeMode in themeModes) ...[
+              _ThemeOptionTile(
+                title: _themeModeLabel(themeMode),
+                subtitle: _themeModeSubtitle(themeMode),
+                icon: _themeModeIcon(themeMode),
+                accentColor: _themeModeAccentColor(themeMode),
+                isSelected: currentMode == themeMode,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  AppThemeController.instance.setThemeMode(themeMode);
+                  CustomSnackBar.showSuccess(
+                    context: context,
+                    title: 'تم تحديث الثيم',
+                  );
+                },
+              ),
+              if (themeMode != themeModes.last) const SizedBox(height: 10),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  String _themeModeLabel(ThemeMode mode) {
+    return switch (mode) {
+      ThemeMode.system => 'النظام',
+      ThemeMode.light => 'فاتح',
+      ThemeMode.dark => 'داكن',
+    };
+  }
+
+  String _themeModeSubtitle(ThemeMode mode) {
+    return switch (mode) {
+      ThemeMode.system => 'استخدم إعدادات الجهاز.',
+      ThemeMode.light => 'استخدم الثيم الفاتح دائمًا.',
+      ThemeMode.dark => 'استخدم الثيم الداكن دائمًا.',
+    };
+  }
+
+  IconData _themeModeIcon(ThemeMode mode) {
+    return switch (mode) {
+      ThemeMode.system => Icons.smartphone_rounded,
+      ThemeMode.light => Icons.wb_sunny_rounded,
+      ThemeMode.dark => Icons.nightlight_round,
+    };
+  }
+
+  Color _themeModeAccentColor(ThemeMode mode) {
+    return switch (mode) {
+      ThemeMode.system => AppColors.info,
+      ThemeMode.light => AppColors.warning,
+      ThemeMode.dark => const Color(0xFF8B5CF6),
+    };
+  }
+}
+
+class _ThemeSelectionSheet extends StatelessWidget {
+  const _ThemeSelectionSheet({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.32),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 14),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeOptionTile extends StatelessWidget {
+  const _ThemeOptionTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.accentColor,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color accentColor;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark
+        ? AppColors.darkTextPrimary
+        : AppColors.lightTextPrimary;
+    final mutedColor = isDark
+        ? AppColors.darkTextSecondary
+        : AppColors.lightTextSecondary;
+
+    return Material(
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.05)
+          : const Color(0xFFF7F8FB),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected
+                  ? accentColor
+                  : (isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.05)),
+            ),
+          ),
+          child: Row(
+            children: [
+              _SettingsTileIcon(icon: icon, color: accentColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: textColor,
+                        fontWeight: FontWeight.w900,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: mutedColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                Icon(AppIcons.tick_circle, color: accentColor, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeModeTileBase extends StatelessWidget {
+  const _ThemeModeTileBase();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark
+        ? AppColors.darkTextPrimary
+        : AppColors.lightTextPrimary;
+    final mutedColor = isDark
+        ? AppColors.darkTextSecondary
+        : AppColors.lightTextSecondary;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ثيم التطبيق',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: textColor,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'غيّر شكل التطبيق من هنا',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: mutedColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              const _SettingsTileIcon(
+                icon: AppIcons.setting_2,
+                color: AppColors.info,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: AppThemeController.instance,
+            builder: (context, mode, _) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              final borderColor = isDark
+                  ? AppColors.darkCardColor
+                  : Colors.grey.shade300;
+
+              Widget buildSegment({
+                required ThemeMode value,
+                required String label,
+                required IconData icon,
+                bool isFirst = false,
+                bool isLast = false,
+              }) {
+                final isSelected = mode == value;
+                final bgActive = isSelected
+                    ? AppColors.primary.withValues(alpha: 0.12)
+                    : Colors.transparent;
+                final fgActive = isDark
+                    ? Colors.white
+                    : AppColors.lightTextPrimary;
+
+                return Expanded(
+                  child: InkWell(
+                    onTap: () =>
+                        AppThemeController.instance.setThemeMode(value),
+                    borderRadius: BorderRadius.horizontal(
+                      right: isFirst ? const Radius.circular(28) : Radius.zero,
+                      left: isLast ? const Radius.circular(28) : Radius.zero,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: bgActive,
+                        borderRadius: BorderRadius.horizontal(
+                          right: isFirst
+                              ? const Radius.circular(28)
+                              : Radius.zero,
+                          left: isLast
+                              ? const Radius.circular(28)
+                              : Radius.zero,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            label,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  fontWeight: isSelected
+                                      ? FontWeight.w900
+                                      : FontWeight.w700,
+                                  color: fgActive,
+                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(icon, size: 18, color: fgActive),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurface
+                      : AppColors.lightBackground,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: borderColor, width: 1.5),
+                ),
+                child: Row(
+                  children: [
+                    buildSegment(
+                      value: ThemeMode.system,
+                      label: 'النظام',
+                      icon: Icons.smartphone_rounded,
+                      isFirst: true,
+                    ),
+                    Container(width: 1.5, height: 24, color: borderColor),
+                    buildSegment(
+                      value: ThemeMode.light,
+                      label: 'فاتح',
+                      icon: Icons.wb_sunny_rounded,
+                    ),
+                    Container(width: 1.5, height: 24, color: borderColor),
+                    buildSegment(
+                      value: ThemeMode.dark,
+                      label: 'داكن',
+                      icon: Icons.nightlight_round,
+                      isLast: true,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SettingsInfoTile extends StatelessWidget {
   const _SettingsInfoTile({
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.accentColor,
+    this.subtitle,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final Color accentColor;
 
   @override
@@ -393,16 +843,18 @@ class _SettingsInfoTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: mutedColor,
-                        fontWeight: FontWeight.w600,
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: mutedColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    ],
                   ],
                 ),
               ),

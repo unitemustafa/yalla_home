@@ -14,10 +14,14 @@ class DemoCourierOrders {
         address: 'شارع التحرير، الدقي، الدور الرابع، بجوار بنك مصر',
         area: 'الدقي',
         total: 845,
-        status: CourierOrderStatus.onTheWay,
+        status: CourierOrderStatus.assigned,
         createdAt: now.subtract(const Duration(hours: 1, minutes: 20)),
         expectedDeliveryAt: now.add(const Duration(minutes: 35)),
         mapQuery: 'شارع التحرير الدقي بنك مصر',
+        customerLocation: const OrderLocation(
+          latitude: 30.038560,
+          longitude: 31.211820,
+        ),
         customerNotes: 'اتصل قبل الوصول بخمس دقائق.',
         items: const [
           CourierOrderItem(name: 'باقة خضار طازة', quantity: 1, price: 320),
@@ -36,6 +40,10 @@ class DemoCourierOrders {
         createdAt: now.subtract(const Duration(minutes: 48)),
         expectedDeliveryAt: now.add(const Duration(hours: 1, minutes: 10)),
         mapQuery: 'دار مصر التجمع الخامس بوابة 3',
+        customerLocation: const OrderLocation(
+          latitude: 30.007600,
+          longitude: 31.462280,
+        ),
         items: const [
           CourierOrderItem(name: 'منظف أرضيات', quantity: 3, price: 95),
           CourierOrderItem(name: 'حفاضات أطفال', quantity: 2, price: 430),
@@ -49,10 +57,14 @@ class DemoCourierOrders {
         address: 'مدينة نصر، شارع عباس العقاد، برج اللوتس، شقة 82',
         area: 'مدينة نصر',
         total: 510,
-        status: CourierOrderStatus.pickedUp,
+        status: CourierOrderStatus.assigned,
         createdAt: now.subtract(const Duration(hours: 2, minutes: 5)),
         expectedDeliveryAt: now.add(const Duration(minutes: 55)),
         mapQuery: 'عباس العقاد برج اللوتس مدينة نصر',
+        customerLocation: const OrderLocation(
+          latitude: 30.062050,
+          longitude: 31.337410,
+        ),
         customerNotes: 'الدفع كاش عند الاستلام.',
         items: const [
           CourierOrderItem(name: 'قهوة تركي', quantity: 2, price: 160),
@@ -73,6 +85,10 @@ class DemoCourierOrders {
         deliveredAt: now.subtract(const Duration(hours: 2, minutes: 42)),
         deliveryNote: 'تم التسليم للعميل شخصيًا.',
         mapQuery: 'شارع 9 المعادي محطة المترو',
+        customerLocation: const OrderLocation(
+          latitude: 29.960450,
+          longitude: 31.258940,
+        ),
         items: const [
           CourierOrderItem(name: 'مياه معدنية', quantity: 6, price: 20),
           CourierOrderItem(name: 'عصير برتقال', quantity: 3, price: 45),
