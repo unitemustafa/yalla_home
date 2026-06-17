@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 
 import '../../constants/app_colors.dart';
+import '../../connectivity/internet_status_controller.dart';
 
 class OfflineConnectionBanner extends StatefulWidget {
   const OfflineConnectionBanner({super.key, required this.child});
@@ -16,74 +16,54 @@ class OfflineConnectionBanner extends StatefulWidget {
 }
 
 class _OfflineConnectionBannerState extends State<OfflineConnectionBanner> {
-  final Connectivity _connectivity = Connectivity();
-  StreamSubscription<List<ConnectivityResult>>? _subscription;
-  bool _isOffline = false;
-  bool _hasConnectivityState = false;
+  late final InternetStatusController _internetStatusController;
 
   @override
   void initState() {
     super.initState();
-    _checkCurrentConnection();
-    _subscription = _connectivity.onConnectivityChanged.listen(
-      _updateConnectionState,
-      onError: (_) {},
-    );
+    _internetStatusController = InternetStatusController();
+    unawaited(_internetStatusController.start());
   }
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    _internetStatusController.dispose();
     super.dispose();
-  }
-
-  Future<void> _checkCurrentConnection() async {
-    try {
-      final result = await _connectivity.checkConnectivity();
-      _updateConnectionState(result);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _hasConnectivityState = true);
-    }
-  }
-
-  void _updateConnectionState(List<ConnectivityResult> result) {
-    final isOffline =
-        result.isEmpty ||
-        result.every((connection) => connection == ConnectivityResult.none);
-
-    if (!mounted) return;
-    if (_hasConnectivityState && _isOffline == isOffline) return;
-
-    setState(() {
-      _hasConnectivityState = true;
-      _isOffline = isOffline;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        widget.child,
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: SafeArea(
-            bottom: false,
-            child: IgnorePointer(
-              ignoring: !_isOffline,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                child: _hasConnectivityState && _isOffline
-                    ? const _OfflineBannerContent()
-                    : const SizedBox.shrink(),
+    return InternetStatusScope(
+      controller: _internetStatusController,
+      child: AnimatedBuilder(
+        animation: _internetStatusController,
+        builder: (context, _) {
+          final isOffline = _internetStatusController.isOffline;
+
+          return Stack(
+            children: [
+              widget.child,
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: IgnorePointer(
+                    ignoring: !isOffline,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: isOffline
+                          ? const _OfflineBannerContent()
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
-      ],
+            ],
+          );
+        },
+      ),
     );
   }
 }

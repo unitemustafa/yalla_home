@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/connectivity/internet_status_controller.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
 import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
@@ -234,15 +235,45 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final statusController = InternetStatusScope.maybeOf(context);
+
+    if (statusController == null) {
+      return const _StatusBadgeContent(label: 'Online', isOffline: false);
+    }
+
+    return AnimatedBuilder(
+      animation: statusController,
+      builder: (context, _) {
+        final isOffline = statusController.isOffline;
+
+        return _StatusBadgeContent(
+          label: isOffline ? 'Offline' : 'Online',
+          isOffline: isOffline,
+        );
+      },
+    );
+  }
+}
+
+class _StatusBadgeContent extends StatelessWidget {
+  const _StatusBadgeContent({required this.label, required this.isOffline});
+
+  final String label;
+  final bool isOffline;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.16),
+        color: isOffline
+            ? AppColors.error.withValues(alpha: 0.92)
+            : Colors.white.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: const Text(
-        'Online',
-        style: TextStyle(
+      child: Text(
+        label,
+        style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.w900,
           fontSize: 12,
