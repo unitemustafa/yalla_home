@@ -11,7 +11,6 @@ import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 import '../../domain/courier_order.dart';
 import '../widgets/delivery_confirmation_sheet.dart';
 import 'courier_tracking_map_view.dart';
-import 'customer_details_view.dart';
 
 typedef OrderDeliveredHandler =
     void Function(String orderId, DeliveryConfirmationResult result);
@@ -41,15 +40,6 @@ class OrderDetailsView extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => CourierTrackingMapView(order: order)),
-    );
-  }
-
-  void _openCustomerDetails(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (_) => CustomerDetailsView(order: order),
-      ),
     );
   }
 
@@ -94,11 +84,7 @@ class OrderDetailsView extends StatelessWidget {
             _SectionCard(
               title: 'بيانات العميل',
               children: [
-                _CustomerSummaryTile(
-                  order: order,
-                  mutedColor: mutedColor,
-                  onTap: () => _openCustomerDetails(context),
-                ),
+                _CustomerSummaryTile(order: order, mutedColor: mutedColor),
                 _DetailRow(
                   icon: AppIcons.location,
                   label: 'العنوان',
@@ -275,15 +261,10 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _CustomerSummaryTile extends StatelessWidget {
-  const _CustomerSummaryTile({
-    required this.order,
-    required this.mutedColor,
-    required this.onTap,
-  });
+  const _CustomerSummaryTile({required this.order, required this.mutedColor});
 
   final CourierOrder order;
   final Color mutedColor;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -291,56 +272,80 @@ class _CustomerSummaryTile extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: AppColors.primary.withValues(alpha: isDark ? 0.10 : 0.045),
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: isDark ? 0.10 : 0.045),
           borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Row(
-              children: [
-                CustomerAvatar(order: order, size: 48),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        order.customerName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        order.phone,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: mutedColor,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
+        ),
+        child: Row(
+          children: [
+            _CustomerAvatar(order: order, size: 48),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    order.customerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  Directionality.of(context) == TextDirection.rtl
-                      ? Icons.chevron_left_rounded
-                      : Icons.chevron_right_rounded,
-                  size: 22,
-                  color: mutedColor,
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    order.phone,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: mutedColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _CustomerAvatar extends StatelessWidget {
+  const _CustomerAvatar({required this.order, this.size = 46});
+
+  final CourierOrder order;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final avatarUrl = order.customerAvatarUrl;
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: isDark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: avatarUrl == null || avatarUrl.isEmpty
+          ? Icon(AppIcons.user, color: AppColors.primary, size: size * 0.52)
+          : Image.network(
+              avatarUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Icon(
+                  AppIcons.user,
+                  color: AppColors.primary,
+                  size: size * 0.52,
+                );
+              },
+            ),
     );
   }
 }
