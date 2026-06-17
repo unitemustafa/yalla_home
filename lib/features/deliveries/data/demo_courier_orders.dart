@@ -17,6 +17,8 @@ class DemoCourierOrders {
         status: CourierOrderStatus.assigned,
         createdAt: now.subtract(const Duration(hours: 1, minutes: 20)),
         expectedDeliveryAt: now.add(const Duration(minutes: 35)),
+        customerAvatarUrl:
+            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=80',
         mapQuery: 'شارع التحرير الدقي بنك مصر',
         customerLocation: const OrderLocation(
           latitude: 30.038560,
@@ -39,6 +41,8 @@ class DemoCourierOrders {
         status: CourierOrderStatus.assigned,
         createdAt: now.subtract(const Duration(minutes: 48)),
         expectedDeliveryAt: now.add(const Duration(hours: 1, minutes: 10)),
+        customerAvatarUrl:
+            'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80',
         mapQuery: 'دار مصر التجمع الخامس بوابة 3',
         customerLocation: const OrderLocation(
           latitude: 30.007600,
@@ -60,6 +64,8 @@ class DemoCourierOrders {
         status: CourierOrderStatus.assigned,
         createdAt: now.subtract(const Duration(hours: 2, minutes: 5)),
         expectedDeliveryAt: now.add(const Duration(minutes: 55)),
+        customerAvatarUrl:
+            'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=160&q=80',
         mapQuery: 'عباس العقاد برج اللوتس مدينة نصر',
         customerLocation: const OrderLocation(
           latitude: 30.062050,

@@ -60,6 +60,7 @@ class CourierOrder {
     required this.createdAt,
     required this.expectedDeliveryAt,
     required this.items,
+    this.customerAvatarUrl,
     this.mapQuery,
     this.customerLocation,
     this.customerNotes,
@@ -78,6 +79,7 @@ class CourierOrder {
   final DateTime createdAt;
   final DateTime expectedDeliveryAt;
   final List<CourierOrderItem> items;
+  final String? customerAvatarUrl;
   final String? mapQuery;
   final OrderLocation? customerLocation;
   final String? customerNotes;
@@ -108,6 +110,7 @@ class CourierOrder {
       createdAt: createdAt,
       expectedDeliveryAt: expectedDeliveryAt,
       items: items,
+      customerAvatarUrl: customerAvatarUrl,
       mapQuery: mapQuery,
       customerLocation: customerLocation,
       customerNotes: customerNotes,
