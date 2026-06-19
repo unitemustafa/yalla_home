@@ -345,18 +345,24 @@ class _CustomRangeSheetState extends State<_CustomRangeSheet> {
                 ),
               ),
               const SizedBox(height: 12),
-              Column(
+              Row(
                 children: [
-                  _DateSelectionCard(
-                    label: 'من',
-                    value: _formatDate(_startDate),
-                    onTap: () => _pickDate(isStart: true),
+                  Expanded(
+                    child: _DateSelectionCard(
+                      label: 'من',
+                      value: _formatDate(_startDate),
+                      onTap: () => _pickDate(isStart: true),
+                      compact: true,
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  _DateSelectionCard(
-                    label: 'إلى',
-                    value: _formatDate(_endDate),
-                    onTap: () => _pickDate(isStart: false),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: _DateSelectionCard(
+                      label: 'إلى',
+                      value: _formatDate(_endDate),
+                      onTap: () => _pickDate(isStart: false),
+                      compact: true,
+                    ),
                   ),
                 ],
               ),
@@ -491,11 +497,13 @@ class _DateSelectionCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onTap,
+    this.compact = false,
   });
 
   final String label;
   final String value;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -505,12 +513,28 @@ class _DateSelectionCard extends StatelessWidget {
         ? Colors.white.withValues(alpha: 0.18)
         : Colors.black.withValues(alpha: 0.10);
     final cardColor = isDark ? AppColors.darkCardColor : AppColors.lightSurface;
+    final labelStyle =
+        (compact ? theme.textTheme.labelMedium : theme.textTheme.labelLarge)
+            ?.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w900,
+              fontSize: compact ? 12.0 : null,
+            );
+    final valueStyle =
+        (compact ? theme.textTheme.titleSmall : theme.textTheme.titleMedium)
+            ?.copyWith(
+              fontWeight: FontWeight.w900,
+              fontSize: compact ? 13.0 : null,
+            );
 
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(_sheetControlRadius),
       child: Ink(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 8 : 12,
+          vertical: compact ? 10 : 12,
+        ),
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(_sheetControlRadius),
@@ -519,8 +543,8 @@ class _DateSelectionCard extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 48,
-              height: 40,
+              width: compact ? 42 : 48,
+              height: compact ? 34 : 40,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(
@@ -535,40 +559,48 @@ class _DateSelectionCard extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w900,
-                ),
+                style: labelStyle,
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: compact ? 6 : 8),
             Expanded(
-              child: Text(
-                value,
-                textDirection: TextDirection.ltr,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
+              child: compact
+                  ? FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        textDirection: TextDirection.ltr,
+                        maxLines: 1,
+                        style: valueStyle,
+                      ),
+                    )
+                  : Text(
+                      value,
+                      textDirection: TextDirection.ltr,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: valueStyle,
+                    ),
+            ),
+            if (!compact) ...[
+              const SizedBox(width: 10),
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(
+                    alpha: isDark ? 0.18 : 0.08,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  AppIcons.calendar,
+                  size: 17,
+                  color: AppColors.primary,
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(
-                  alpha: isDark ? 0.18 : 0.08,
-                ),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                AppIcons.calendar,
-                size: 17,
-                color: AppColors.primary,
-              ),
-            ),
+            ],
           ],
         ),
       ),
