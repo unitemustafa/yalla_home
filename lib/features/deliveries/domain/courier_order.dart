@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/auth/auth_session.dart';
 
 enum CourierOrderStatus { assigned, delivered }
 
@@ -86,6 +87,69 @@ class CourierOrder {
   final DateTime? deliveredAt;
   final String? deliveryNote;
   final DeliveryProof? deliveryProof;
+
+  factory CourierOrder.fromJson(Map<String, dynamic> json) {
+    final customer = json['customer'] as Map<String, dynamic>? ?? const {};
+    final address = json['delivery_address'] as Map<String, dynamic>?;
+    final itemsJson = json['items'] as List<dynamic>? ?? const [];
+    final status = json['status'] == 'delivered'
+        ? CourierOrderStatus.delivered
+        : CourierOrderStatus.assigned;
+    DateTime parseDate(Object? value, {DateTime? fallback}) =>
+        DateTime.tryParse(value?.toString() ?? '')?.toLocal() ??
+        fallback ??
+        DateTime.now();
+    double number(Object? value) =>
+        double.tryParse(value?.toString() ?? '') ?? 0;
+    final firstName = customer['first_name']?.toString().trim() ?? '';
+    final lastName = customer['last_name']?.toString().trim() ?? '';
+    final createdAt = parseDate(json['created_at']);
+    return CourierOrder(
+      id: json['id'].toString(),
+      customerName: [
+        firstName,
+        lastName,
+      ].where((part) => part.isNotEmpty).join(' '),
+      phone: customer['phone']?.toString() ?? '',
+      address: address?['name']?.toString() ?? 'موقع العميل',
+      area: address?['name']?.toString() ?? 'غير محدد',
+      total: number(json['total_price']),
+      status: status,
+      createdAt: createdAt,
+      expectedDeliveryAt: parseDate(
+        json['assigned_at'],
+        fallback: createdAt,
+      ).add(const Duration(hours: 1)),
+      items: itemsJson.whereType<Map<String, dynamic>>().map((item) {
+        final variant = item['variant'] as Map<String, dynamic>? ?? const {};
+        final product = variant['product'] as Map<String, dynamic>? ?? const {};
+        return CourierOrderItem(
+          name: product['name']?.toString() ?? 'منتج',
+          quantity: int.tryParse(item['quantity']?.toString() ?? '') ?? 0,
+          price: number(item['unit_price']),
+        );
+      }).toList(),
+      customerAvatarUrl: AuthSession.instance.absoluteUrl(
+        customer['avatar_url'],
+      ),
+      mapQuery: address?['name']?.toString(),
+      customerLocation: address == null
+          ? null
+          : OrderLocation(
+              latitude: number(address['latitude']),
+              longitude: number(address['longitude']),
+            ),
+      customerNotes: (json['description']?.toString().trim().isEmpty ?? true)
+          ? null
+          : json['description'].toString(),
+      deliveredAt: json['delivered_at'] == null
+          ? null
+          : parseDate(json['delivered_at']),
+      deliveryNote: (json['delivery_note']?.toString().trim().isEmpty ?? true)
+          ? null
+          : json['delivery_note'].toString(),
+    );
+  }
 
   int get itemCount {
     return items.fold<int>(0, (total, item) => total + item.quantity);

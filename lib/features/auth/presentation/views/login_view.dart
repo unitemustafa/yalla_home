@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/auth/auth_session.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/app_action_button.dart';
+import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 import '../../../../core/routing/app_routes.dart';
+import '../../../../core/network/api_exception.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -24,8 +27,8 @@ class _LoginViewState extends State<LoginView> {
   @override
   void initState() {
     super.initState();
-    _identifierController = TextEditingController(text: 'yalla@admin.com');
-    _passwordController = TextEditingController(text: '01266666610');
+    _identifierController = TextEditingController();
+    _passwordController = TextEditingController();
   }
 
   @override
@@ -39,10 +42,26 @@ class _LoginViewState extends State<LoginView> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _isLoading = true);
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-    _goToDashboard();
+    try {
+      await AuthSession.instance.login(
+        identifier: _identifierController.text.trim(),
+        password: _passwordController.text,
+        remember: _rememberMe,
+      );
+      if (!mounted) return;
+      _goToDashboard();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      CustomSnackBar.showError(context: context, title: error.message);
+    } catch (_) {
+      if (!mounted) return;
+      CustomSnackBar.showError(
+        context: context,
+        title: 'تعذر الاتصال بالخادم. حاول مرة أخرى.',
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   void _goToDashboard() {
@@ -58,14 +77,15 @@ class _LoginViewState extends State<LoginView> {
     if (text.isEmpty) return 'اكتب رقم الموبايل أو الإيميل';
     final looksLikeEmail = text.contains('@') && text.contains('.');
     final looksLikePhone = RegExp(r'^\+?\d{10,15}$').hasMatch(text);
-    if (!looksLikeEmail && !looksLikePhone) {
+    final looksLikeUsername = RegExp(r'^[\w.@+-]+$').hasMatch(text);
+    if (!looksLikeEmail && !looksLikePhone && !looksLikeUsername) {
       return 'اكتب إيميل صحيح أو رقم موبايل صحيح';
     }
     return null;
   }
 
   String? _validatePassword(String? value) {
-    if ((value ?? '').length < 6) return 'كلمة المرور لا تقل عن 6 أحرف';
+    if ((value ?? '').length < 8) return 'كلمة المرور لا تقل عن 8 أحرف';
     return null;
   }
 

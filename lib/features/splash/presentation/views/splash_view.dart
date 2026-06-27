@@ -1,8 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_assets.dart';
+import '../../../../core/auth/auth_session.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/routing/app_routes.dart';
@@ -23,7 +22,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
   late final Animation<double> _titleOpacity;
   late final Animation<Offset> _titleSlide;
   late final Animation<double> _loadingOpacity;
-  Timer? _navigationTimer;
 
   @override
   void initState() {
@@ -72,15 +70,22 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
 
     _entranceController.forward();
     _activityController.repeat();
-    _navigationTimer = Timer(const Duration(milliseconds: 1500), () {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed(AppRoutes.login);
-    });
+    _restoreSession();
+  }
+
+  Future<void> _restoreSession() async {
+    final results = await Future.wait<dynamic>([
+      Future<void>.delayed(const Duration(milliseconds: 1500)),
+      AuthSession.instance.restore(),
+    ]);
+    if (!mounted) return;
+    Navigator.of(context).pushReplacementNamed(
+      results[1] == true ? AppRoutes.dashboard : AppRoutes.login,
+    );
   }
 
   @override
   void dispose() {
-    _navigationTimer?.cancel();
     _activityController.dispose();
     _entranceController.dispose();
     super.dispose();

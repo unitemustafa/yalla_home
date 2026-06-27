@@ -13,10 +13,12 @@ class CourierOrdersView extends StatefulWidget {
     super.key,
     required this.orders,
     required this.onDelivered,
+    required this.onRefresh,
   });
 
   final List<CourierOrder> orders;
   final OrderDeliveredHandler onDelivered;
+  final Future<void> Function() onRefresh;
 
   @override
   State<CourierOrdersView> createState() => _CourierOrdersViewState();
@@ -35,36 +37,40 @@ class _CourierOrdersViewState extends State<CourierOrdersView> {
   Widget build(BuildContext context) {
     final orders = _filteredOrders;
 
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-      itemCount: orders.isEmpty ? 4 : orders.length + 3,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return const PageTopBar(
-            title: 'طلبات التوصيل',
-            subtitle: 'الطلبات المطلوب تسليمها اليوم',
-          );
-        }
+    return RefreshIndicator(
+      onRefresh: widget.onRefresh,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        itemCount: orders.isEmpty ? 4 : orders.length + 3,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return const PageTopBar(
+              title: 'طلبات التوصيل',
+              subtitle: 'الطلبات المطلوب تسليمها اليوم',
+            );
+          }
 
-        if (index == 1) {
-          return _OrdersSummaryCard(orders: widget.orders);
-        }
+          if (index == 1) {
+            return _OrdersSummaryCard(orders: widget.orders);
+          }
 
-        if (index == 2) {
-          return _StatusFilters(
-            selectedStatus: _selectedStatus,
-            onChanged: (status) => setState(() => _selectedStatus = status),
-          );
-        }
+          if (index == 2) {
+            return _StatusFilters(
+              selectedStatus: _selectedStatus,
+              onChanged: (status) => setState(() => _selectedStatus = status),
+            );
+          }
 
-        if (orders.isEmpty) {
-          return const _EmptyOrdersState();
-        }
+          if (orders.isEmpty) {
+            return const _EmptyOrdersState();
+          }
 
-        final order = orders[index - 3];
-        return OrderCard(order: order, onTap: () => _openDetails(order));
-      },
+          final order = orders[index - 3];
+          return OrderCard(order: order, onTap: () => _openDetails(order));
+        },
+      ),
     );
   }
 

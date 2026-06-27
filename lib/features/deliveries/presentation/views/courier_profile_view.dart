@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_assets.dart';
+import '../../../../core/auth/auth_session.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/connectivity/internet_status_controller.dart';
 import '../../../../core/icons/app_icons.dart';
@@ -153,6 +154,15 @@ class _CourierHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = AuthSession.instance.currentUser ?? const <String, dynamic>{};
+    final profile =
+        user['courier_profile'] as Map<String, dynamic>? ??
+        const <String, dynamic>{};
+    final name = [user['first_name'], user['last_name']]
+        .map((value) => value?.toString().trim() ?? '')
+        .where((value) => value.isNotEmpty)
+        .join(' ');
+    final area = profile['delivery_area_name']?.toString() ?? 'غير محدد';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -191,7 +201,7 @@ class _CourierHero extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        'كابتن مصطفى',
+                        name.isEmpty ? 'مندوب Yalla Home' : name,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: Colors.white,
                           fontSize: 20,
@@ -211,7 +221,7 @@ class _CourierHero extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'شيفت القاهرة • متاح للتوصيل',
+                  '$area • ${profile['is_available'] == false ? 'غير متاح' : 'متاح للتوصيل'}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.78),
                     fontWeight: FontWeight.w700,

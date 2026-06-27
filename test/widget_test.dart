@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:yalla_home/core/theme/app_theme_controller.dart';
 import 'package:yalla_home/features/deliveries/domain/courier_order.dart';
@@ -9,9 +10,10 @@ import 'package:yalla_home/yalla_home_app.dart';
 
 void main() {
   testWidgets('shows Yalla Home login screen', (WidgetTester tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
     await tester.pumpWidget(const YallaHomeApp());
     await tester.pump(const Duration(milliseconds: 1600));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.text('أهلاً يا كابتن'), findsOneWidget);
     expect(find.text('رقم الموبايل أو الإيميل'), findsOneWidget);
@@ -20,8 +22,8 @@ void main() {
     expect(find.text('تواصل مع الدعم'), findsOneWidget);
 
     final fields = tester.widgetList<TextFormField>(find.byType(TextFormField));
-    expect(fields.elementAt(0).controller?.text, 'yalla@admin.com');
-    expect(fields.elementAt(1).controller?.text, '01266666610');
+    expect(fields.elementAt(0).controller?.text, isEmpty);
+    expect(fields.elementAt(1).controller?.text, isEmpty);
 
     final rememberMe = tester.widget<Checkbox>(find.byType(Checkbox));
     expect(rememberMe.value, isTrue);

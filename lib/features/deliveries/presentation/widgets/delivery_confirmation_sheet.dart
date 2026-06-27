@@ -71,14 +71,20 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
     final proof = file != null && bytes != null
         ? DeliveryProof(fileName: file.name, bytes: bytes)
         : null;
+    final note = _noteController.text.trim();
+    if (proof == null && note.isEmpty) {
+      CustomSnackBar.showError(
+        context: context,
+        title: 'أضف صورة إثبات أو ملاحظة قبل تأكيد التسليم.',
+      );
+      return;
+    }
 
     Navigator.pop(
       context,
       DeliveryConfirmationResult(
         proof: proof,
-        note: _noteController.text.trim().isEmpty
-            ? null
-            : _noteController.text.trim(),
+        note: note.isEmpty ? null : note,
       ),
     );
   }

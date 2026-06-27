@@ -13,7 +13,7 @@ import '../widgets/delivery_confirmation_sheet.dart';
 import 'courier_tracking_map_view.dart';
 
 typedef OrderDeliveredHandler =
-    void Function(String orderId, DeliveryConfirmationResult result);
+    Future<void> Function(String orderId, DeliveryConfirmationResult result);
 
 class OrderDetailsView extends StatelessWidget {
   const OrderDetailsView({super.key, required this.order, this.onDelivered});
@@ -82,7 +82,14 @@ class OrderDetailsView extends StatelessWidget {
     );
 
     if (result == null || !context.mounted) return;
-    onDelivered?.call(order.id, result);
+    try {
+      await onDelivered?.call(order.id, result);
+    } catch (error) {
+      if (!context.mounted) return;
+      CustomSnackBar.showError(context: context, title: error.toString());
+      return;
+    }
+    if (!context.mounted) return;
     _showMessage(context, 'تم تسجيل التسليم بنجاح.');
     Navigator.pop(context);
   }

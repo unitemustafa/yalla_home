@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/auth/auth_session.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/routing/app_routes.dart';
-import '../../data/demo_courier_orders.dart';
+import '../../data/courier_orders_api.dart';
 import '../../domain/courier_order.dart';
 import '../widgets/delivery_confirmation_sheet.dart';
 import 'courier_notifications_view.dart';
@@ -21,14 +22,17 @@ class CourierShellView extends StatefulWidget {
 }
 
 class _CourierShellViewState extends State<CourierShellView> {
-  late List<CourierOrder> _orders;
+  final _api = const CourierOrdersApi();
+  List<CourierOrder> _orders = [];
+  bool _loading = true;
+  String? _loadError;
   int _selectedIndex = 0;
   int _unreadNotificationCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _orders = DemoCourierOrders.initialOrders();
+    _loadOrders();
   }
 
   List<CourierOrder> get _activeOrders {
@@ -39,25 +43,51 @@ class _CourierShellViewState extends State<CourierShellView> {
     return _orders.where((order) => order.isDelivered).toList();
   }
 
-  void _markDelivered(String orderId, DeliveryConfirmationResult result) {
+  Future<void> _loadOrders() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
+    try {
+      final orders = await _api.loadOrders();
+      if (!mounted) return;
+      setState(() {
+        _orders = orders;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = error.toString();
+      });
+    }
+  }
+
+  Future<void> _markDelivered(
+    String orderId,
+    DeliveryConfirmationResult result,
+  ) async {
+    final delivered = await _api.deliver(
+      orderId,
+      note: result.note,
+      proof: result.proof,
+    );
+    if (!mounted) return;
     setState(() {
       _orders = [
         for (final order in _orders)
-          if (order.id == orderId)
-            order.copyWith(
-              status: CourierOrderStatus.delivered,
-              deliveredAt: DateTime.now(),
-              deliveryNote: result.note,
-              deliveryProof: result.proof,
-            )
-          else
-            order,
+          if (order.id == orderId) delivered else order,
       ];
       _selectedIndex = 1;
     });
   }
 
-  void _logout() {
+  Future<void> _logout() async {
+    await AuthSession.instance.logout();
+    if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(
       context,
       AppRoutes.login,
@@ -68,7 +98,11 @@ class _CourierShellViewState extends State<CourierShellView> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      CourierOrdersView(orders: _activeOrders, onDelivered: _markDelivered),
+      CourierOrdersView(
+        orders: _activeOrders,
+        onDelivered: _markDelivered,
+        onRefresh: _loadOrders,
+      ),
       DeliveredHistoryView(orders: _deliveredOrders),
       CourierNotificationsView(
         orders: _orders,
@@ -86,7 +120,26 @@ class _CourierShellViewState extends State<CourierShellView> {
 
     return Scaffold(
       body: SafeArea(
-        child: IndexedStack(index: _selectedIndex, children: screens),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _loadError != null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_loadError!, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _loadOrders,
+                        child: const Text('إعادة المحاولة'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : IndexedStack(index: _selectedIndex, children: screens),
       ),
       bottomNavigationBar: _CourierBottomNavigationBar(
         selectedIndex: _selectedIndex,
