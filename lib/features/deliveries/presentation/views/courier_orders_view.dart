@@ -269,20 +269,25 @@ class _EmptyOrdersState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final panelColor = isDark ? AppColors.darkCardColor : Colors.white;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.05);
+    final iconColor = isDark
+        ? AppColors.darkTextSecondary
+        : AppColors.lightTextSecondary;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: panelColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         children: [
-          Icon(
-            AppIcons.filter_search,
-            size: 30,
-            color: AppColors.lightTextSecondary,
-          ),
+          Icon(AppIcons.filter_search, size: 30, color: iconColor),
           const SizedBox(height: 10),
           Text(
             'لا توجد طلبات بهذا الفلتر',

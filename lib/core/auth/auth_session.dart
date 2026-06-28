@@ -12,11 +12,22 @@ class AuthSession {
   static final instance = AuthSession._();
   static const _refreshKey = 'yalla_home_refresh_token';
   static const _configuredApiBaseUrl = String.fromEnvironment('API_BASE_URL');
-  static String get apiBaseUrl => _configuredApiBaseUrl.isNotEmpty
-      ? _configuredApiBaseUrl
-      : kIsWeb
-          ? 'http://127.0.0.1:8000/api/v1'
-          : 'http://10.0.2.2:8000/api/v1';
+  static String get apiBaseUrl {
+    final configured = _configuredApiBaseUrl.trim();
+    final baseUrl = configured.isNotEmpty
+        ? configured
+        : kIsWeb
+        ? 'http://127.0.0.1:8000/api/v1'
+        : 'http://10.0.2.2:8000/api/v1';
+    return _normalizeApiBaseUrl(baseUrl);
+  }
+
+  static String _normalizeApiBaseUrl(String baseUrl) {
+    final uri = Uri.parse(baseUrl.trim());
+    final path = uri.path.replaceFirst(RegExp(r'/+$'), '');
+    if (path.isEmpty) return uri.replace(path: '/api/v1').toString();
+    return uri.replace(path: path).toString();
+  }
 
   final _client = http.Client();
   final _storage = const FlutterSecureStorage();
@@ -216,7 +227,9 @@ class AuthSession {
   }
 
   String _message(dynamic data, String fallback) {
-    if (data is String && data.trim().isNotEmpty) return data;
+    if (data is String && data.trim().isNotEmpty) {
+      return _localizedMessage(data);
+    }
     if (data is List) {
       for (final value in data) {
         final message = _message(value, '');
@@ -224,12 +237,31 @@ class AuthSession {
       }
     }
     if (data is Map) {
-      if (data['detail'] is String) return data['detail'] as String;
+      if (data['detail'] is String) {
+        return _localizedMessage(data['detail'] as String);
+      }
       for (final value in data.values) {
         final message = _message(value, '');
         if (message.isNotEmpty) return message;
       }
     }
-    return fallback;
+    return _localizedMessage(fallback);
+  }
+
+  String _localizedMessage(String message) {
+    final normalized = message.trim().toLowerCase();
+    if (normalized.contains('invalid email or password')) {
+      return 'الإيميل أو كلمة السر غير صحيحين.';
+    }
+    if (normalized.contains('this login is only for representative accounts')) {
+      return 'تسجيل الدخول هنا مخصص لحسابات المندوبين فقط.';
+    }
+    if (normalized.contains('account email has not been verified')) {
+      return 'الحساب لم يتم تفعيله بعد.';
+    }
+    if (normalized.contains('not found')) {
+      return 'المسار غير موجود. تأكد من إعداد رابط الخادم.';
+    }
+    return message;
   }
 }

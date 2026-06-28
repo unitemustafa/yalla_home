@@ -19,7 +19,7 @@ void main() {
     expect(find.text('رقم الموبايل أو الإيميل'), findsOneWidget);
     expect(find.text('دخول Demo'), findsNothing);
     expect(find.text('تذكرني'), findsOneWidget);
-    expect(find.text('تواصل مع الدعم'), findsOneWidget);
+    expect(find.text('الدعم الفني'), findsOneWidget);
 
     final fields = tester.widgetList<TextFormField>(find.byType(TextFormField));
     expect(fields.elementAt(0).controller?.text, isEmpty);
@@ -29,9 +29,9 @@ void main() {
     expect(rememberMe.value, isTrue);
 
     final supportButton = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'تواصل مع الدعم'),
+      find.widgetWithText(TextButton, 'الدعم الفني'),
     );
-    expect(supportButton.onPressed, isNull);
+    expect(supportButton.onPressed, isNotNull);
   });
 
   testWidgets('hides active order time and shows delivered time', (

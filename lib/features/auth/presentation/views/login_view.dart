@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/auth/auth_session.dart';
 import '../../../../core/constants/app_assets.dart';
@@ -72,6 +73,17 @@ class _LoginViewState extends State<LoginView> {
     );
   }
 
+  Future<void> _openTechnicalSupport() async {
+    final uri = Uri.https('wa.me', '/201016487371');
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      CustomSnackBar.showError(
+        context: context,
+        title: 'تعذر فتح واتساب على هذا الجهاز.',
+      );
+    }
+  }
+
   String? _validateIdentifier(String? value) {
     final text = value?.trim() ?? '';
     if (text.isEmpty) return 'اكتب رقم الموبايل أو الإيميل';
@@ -85,7 +97,7 @@ class _LoginViewState extends State<LoginView> {
   }
 
   String? _validatePassword(String? value) {
-    if ((value ?? '').length < 8) return 'كلمة المرور لا تقل عن 8 أحرف';
+    if ((value ?? '').isEmpty) return 'اكتب كلمة المرور';
     return null;
   }
 
@@ -176,7 +188,6 @@ class _LoginViewState extends State<LoginView> {
                             AppActionButton(
                               label: 'تسجيل الدخول',
                               isLoading: _isLoading,
-                              icon: AppIcons.tick_circle,
                               onPressed: _isLoading ? null : _signIn,
                             ),
                           ],
@@ -197,9 +208,6 @@ class _LoginViewState extends State<LoginView> {
     final textColor = isDark
         ? Colors.white.withValues(alpha: 0.88)
         : Colors.black.withValues(alpha: 0.78);
-    final disabledTextColor = isDark
-        ? Colors.white.withValues(alpha: 0.36)
-        : Colors.black.withValues(alpha: 0.34);
 
     return Row(
       children: [
@@ -244,15 +252,15 @@ class _LoginViewState extends State<LoginView> {
         ),
         const SizedBox(width: 12),
         TextButton(
-          onPressed: null,
+          onPressed: _openTechnicalSupport,
           style: TextButton.styleFrom(
-            disabledForegroundColor: disabledTextColor,
+            foregroundColor: AppColors.primary,
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
           child: const Text(
-            'تواصل مع الدعم',
+            'الدعم الفني',
             overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
           ),

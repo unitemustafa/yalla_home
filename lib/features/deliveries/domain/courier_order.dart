@@ -68,6 +68,7 @@ class CourierOrder {
     this.deliveredAt,
     this.deliveryNote,
     this.deliveryProof,
+    this.deliveryProofUrl,
   });
 
   final String id;
@@ -87,6 +88,7 @@ class CourierOrder {
   final DateTime? deliveredAt;
   final String? deliveryNote;
   final DeliveryProof? deliveryProof;
+  final String? deliveryProofUrl;
 
   factory CourierOrder.fromJson(Map<String, dynamic> json) {
     final customer = json['customer'] as Map<String, dynamic>? ?? const {};
@@ -101,9 +103,18 @@ class CourierOrder {
         DateTime.now();
     double number(Object? value) =>
         double.tryParse(value?.toString() ?? '') ?? 0;
+    double? optionalNumber(Object? value) =>
+        double.tryParse(value?.toString() ?? '');
     final firstName = customer['first_name']?.toString().trim() ?? '';
     final lastName = customer['last_name']?.toString().trim() ?? '';
     final createdAt = parseDate(json['created_at']);
+    final latitude = optionalNumber(address?['latitude']);
+    final longitude = optionalNumber(address?['longitude']);
+    final hasCustomerLocation =
+        latitude != null &&
+        longitude != null &&
+        latitude != 0 &&
+        longitude != 0;
     return CourierOrder(
       id: json['id'].toString(),
       customerName: [
@@ -133,12 +144,9 @@ class CourierOrder {
         customer['avatar_url'],
       ),
       mapQuery: address?['name']?.toString(),
-      customerLocation: address == null
-          ? null
-          : OrderLocation(
-              latitude: number(address['latitude']),
-              longitude: number(address['longitude']),
-            ),
+      customerLocation: hasCustomerLocation
+          ? OrderLocation(latitude: latitude, longitude: longitude)
+          : null,
       customerNotes: (json['description']?.toString().trim().isEmpty ?? true)
           ? null
           : json['description'].toString(),
@@ -148,6 +156,9 @@ class CourierOrder {
       deliveryNote: (json['delivery_note']?.toString().trim().isEmpty ?? true)
           ? null
           : json['delivery_note'].toString(),
+      deliveryProofUrl: AuthSession.instance.absoluteUrl(
+        json['delivery_proof'],
+      ),
     );
   }
 
@@ -162,6 +173,7 @@ class CourierOrder {
     DateTime? deliveredAt,
     String? deliveryNote,
     DeliveryProof? deliveryProof,
+    String? deliveryProofUrl,
   }) {
     return CourierOrder(
       id: id,
@@ -181,6 +193,7 @@ class CourierOrder {
       deliveredAt: deliveredAt ?? this.deliveredAt,
       deliveryNote: deliveryNote ?? this.deliveryNote,
       deliveryProof: deliveryProof ?? this.deliveryProof,
+      deliveryProofUrl: deliveryProofUrl ?? this.deliveryProofUrl,
     );
   }
 }

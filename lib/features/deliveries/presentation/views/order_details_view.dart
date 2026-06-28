@@ -509,6 +509,7 @@ class _DeliveryProofCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final proof = order.deliveryProof;
+    final proofUrl = order.deliveryProofUrl;
 
     return _SectionCard(
       title: 'إثبات التسليم',
@@ -526,7 +527,7 @@ class _DeliveryProofCard extends StatelessWidget {
             value: order.deliveryNote!,
             mutedColor: mutedColor,
           ),
-        if (proof == null)
+        if (proof == null && proofUrl == null)
           Text(
             'لا توجد صورة مرفوعة.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -534,11 +535,21 @@ class _DeliveryProofCard extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           )
+        else if (proofUrl != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              proofUrl,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: 160,
+            ),
+          )
         else
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: Image.memory(
-              proof.bytes,
+              proof!.bytes,
               fit: BoxFit.cover,
               width: double.infinity,
               height: 160,
