@@ -93,9 +93,9 @@ class _OrdersSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final activeCount = orders.length;
-    final assignedCount = orders
-        .where((order) => order.status == CourierOrderStatus.assigned)
+    final activeCount = orders.where((order) => !order.isTerminal).length;
+    final pickupRequiredCount = orders
+        .where((order) => order.requiresPickup)
         .length;
     final totalValue = orders.fold<double>(
       0,
@@ -127,9 +127,9 @@ class _OrdersSummaryCard extends StatelessWidget {
           const SizedBox(width: 8),
           _SummaryPill(
             icon: AppIcons.box,
-            value: '$assignedCount',
-            label: CourierOrderStatus.assigned.label,
-            color: CourierOrderStatus.assigned.color,
+            value: '$pickupRequiredCount',
+            label: 'مطلوب الاستلام',
+            color: CourierOrderStatus.ready.color,
             isDark: isDark,
           ),
           const SizedBox(width: 8),
@@ -227,10 +227,12 @@ class _StatusFilters extends StatelessWidget {
   Widget build(BuildContext context) {
     final filters = <({String label, CourierOrderStatus? status})>[
       (label: 'الكل', status: null),
-      (
-        label: CourierOrderStatus.assigned.label,
-        status: CourierOrderStatus.assigned,
-      ),
+      for (final status in CourierOrderStatus.values)
+        if (status != CourierOrderStatus.unknown &&
+            status != CourierOrderStatus.delivered &&
+            status != CourierOrderStatus.failedDelivery &&
+            status != CourierOrderStatus.cancelled)
+          (label: status.label, status: status),
     ];
 
     return SingleChildScrollView(

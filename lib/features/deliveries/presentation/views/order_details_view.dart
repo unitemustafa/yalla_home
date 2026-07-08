@@ -8,6 +8,7 @@ import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/app_action_button.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
 import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
+import '../../data/courier_orders_api.dart';
 import '../../domain/courier_order.dart';
 import '../widgets/delivery_confirmation_sheet.dart';
 import 'courier_tracking_map_view.dart';
@@ -15,14 +16,51 @@ import 'courier_tracking_map_view.dart';
 typedef OrderDeliveredHandler =
     Future<void> Function(String orderId, DeliveryConfirmationResult result);
 
-class OrderDetailsView extends StatelessWidget {
+class OrderDetailsView extends StatefulWidget {
   const OrderDetailsView({super.key, required this.order, this.onDelivered});
 
   final CourierOrder order;
   final OrderDeliveredHandler? onDelivered;
 
+  @override
+  State<OrderDetailsView> createState() => _OrderDetailsViewState();
+}
+
+class _OrderDetailsViewState extends State<OrderDetailsView> {
+  final _api = const CourierOrdersApi();
+  late CourierOrder _order = widget.order;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDetails();
+  }
+
+  Future<void> _loadDetails() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final order = await _api.loadOrder(widget.order.id);
+      if (!mounted) return;
+      setState(() {
+        _order = order;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString();
+      });
+    }
+  }
+
   Future<void> _openWhatsAppChat(BuildContext context) async {
-    final phone = order.phone.replaceAll(RegExp(r'\D'), '');
+    final phone = _order.phone.replaceAll(RegExp(r'\D'), '');
     final uri = Uri.https('wa.me', '/$phone');
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
 
@@ -33,7 +71,7 @@ class OrderDetailsView extends StatelessWidget {
   }
 
   Future<void> _callCustomer(BuildContext context) async {
-    final uri = Uri(scheme: 'tel', path: order.phone);
+    final uri = Uri(scheme: 'tel', path: _order.phone);
     if (!await canLaunchUrl(uri)) {
       if (!context.mounted) return;
       _showMessage(context, 'المكالمات غير مدعومة على هذا الجهاز.');
@@ -62,14 +100,14 @@ class OrderDetailsView extends StatelessWidget {
   }
 
   void _openMap(BuildContext context) {
-    if (order.customerLocation == null) {
+    if (_order.customerLocation == null) {
       _showMessage(context, 'موقع العميل غير متاح لهذا الطلب.');
       return;
     }
 
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => CourierTrackingMapView(order: order)),
+      MaterialPageRoute(builder: (_) => CourierTrackingMapView(order: _order)),
     );
   }
 
@@ -78,12 +116,12 @@ class OrderDetailsView extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => DeliveryConfirmationSheet(orderId: order.id),
+      builder: (_) => DeliveryConfirmationSheet(orderId: _order.id),
     );
 
     if (result == null || !context.mounted) return;
     try {
-      await onDelivered?.call(order.id, result);
+      await widget.onDelivered?.call(_order.id, result);
     } catch (error) {
       if (!context.mounted) return;
       CustomSnackBar.showError(context: context, title: error.toString());
@@ -101,83 +139,166 @@ class OrderDetailsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final order = _order;
     final mutedColor = isDark
         ? Colors.white.withValues(alpha: 0.62)
         : Colors.black.withValues(alpha: 0.58);
 
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-          children: [
-            PageTopBar(
-              title: 'تفاصيل الطلب',
-              subtitle: order.id,
-              showBackButton: true,
-            ),
-            const SizedBox(height: 14),
-            _OrderHeader(order: order, mutedColor: mutedColor),
-            const SizedBox(height: 12),
-            _SectionCard(
-              title: 'بيانات العميل',
-              children: [
-                _CustomerSummaryTile(order: order, mutedColor: mutedColor),
-                _DetailRow(
-                  icon: AppIcons.location,
-                  label: 'العنوان',
-                  value: order.address,
-                  mutedColor: mutedColor,
-                  copyable: true,
-                ),
-                if (order.customerNotes != null)
-                  _DetailRow(
-                    icon: AppIcons.document_text,
-                    label: 'ملاحظة العميل',
-                    value: order.customerNotes!,
-                    mutedColor: mutedColor,
-                    copyable: true,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? _DetailRetryState(error: _error!, onRetry: _loadDetails)
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                children: [
+                  PageTopBar(
+                    title: 'تفاصيل الطلب',
+                    subtitle: order.id,
+                    showBackButton: true,
                   ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _SectionCard(
-              title: 'المنتجات',
-              children: [
-                for (final item in order.items) _ProductRow(item: item),
-              ],
-            ),
-            if (order.isDelivered) ...[
-              const SizedBox(height: 12),
-              _DeliveryProofCard(order: order, mutedColor: mutedColor),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showContactOptions(context),
-                    icon: const Icon(AppIcons.call, size: 18),
-                    label: const Text('تواصل'),
+                  const SizedBox(height: 14),
+                  _OrderHeader(order: order, mutedColor: mutedColor),
+                  const SizedBox(height: 12),
+                  _SectionCard(
+                    title: 'بيانات العميل',
+                    children: [
+                      _CustomerSummaryTile(
+                        order: order,
+                        mutedColor: mutedColor,
+                      ),
+                      if (order.addressLabel != null)
+                        _DetailRow(
+                          icon: AppIcons.location,
+                          label: 'اسم العنوان',
+                          value: order.addressLabel!,
+                          mutedColor: mutedColor,
+                        ),
+                      _DetailRow(
+                        icon: AppIcons.location,
+                        label: 'العنوان',
+                        value: order.address,
+                        mutedColor: mutedColor,
+                        copyable: true,
+                      ),
+                      if (order.deliveryAreaName != null)
+                        _DetailRow(
+                          icon: AppIcons.location,
+                          label: 'المنطقة',
+                          value: order.deliveryAreaName!,
+                          mutedColor: mutedColor,
+                        ),
+                      if (order.serviceCityName != null)
+                        _DetailRow(
+                          icon: AppIcons.location,
+                          label: 'المدينة',
+                          value: order.serviceCityName!,
+                          mutedColor: mutedColor,
+                        ),
+                      _DetailRow(
+                        icon: AppIcons.shopping_bag,
+                        label: 'المحل',
+                        value: order.marketSummary,
+                        mutedColor: mutedColor,
+                      ),
+                      if (order.marketCount > 1)
+                        _DetailRow(
+                          icon: AppIcons.box,
+                          label: 'عدد المحلات',
+                          value: '${order.marketCount}',
+                          mutedColor: mutedColor,
+                        ),
+                      if (order.customerNotes != null)
+                        _DetailRow(
+                          icon: AppIcons.document_text,
+                          label: 'ملاحظة العميل',
+                          value: order.customerNotes!,
+                          mutedColor: mutedColor,
+                          copyable: true,
+                        ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _openMap(context),
-                    icon: const Icon(AppIcons.routing, size: 18),
-                    label: const Text('الخريطة'),
+                  const SizedBox(height: 12),
+                  _SectionCard(
+                    title: 'المنتجات',
+                    children: order.items.isEmpty
+                        ? [
+                            Text(
+                              'لا توجد منتجات في هذا الطلب.',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: mutedColor,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                          ]
+                        : [
+                            for (final item in order.items)
+                              _ProductRow(item: item),
+                          ],
                   ),
-                ),
-              ],
-            ),
-            if (!order.isDelivered) ...[
-              const SizedBox(height: 12),
-              AppActionButton(
-                label: 'تم التسليم',
-                icon: AppIcons.tick_circle,
-                onPressed: () => _confirmDelivery(context),
+                  if (order.isDelivered) ...[
+                    const SizedBox(height: 12),
+                    _DeliveryProofCard(order: order, mutedColor: mutedColor),
+                  ],
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      if (order.phone.isNotEmpty) ...[
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showContactOptions(context),
+                            icon: const Icon(AppIcons.call, size: 18),
+                            label: const Text('تواصل'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _openMap(context),
+                          icon: const Icon(AppIcons.routing, size: 18),
+                          label: const Text('الخريطة'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (!order.isDelivered) ...[
+                    const SizedBox(height: 12),
+                    AppActionButton(
+                      label: 'تم التسليم',
+                      icon: AppIcons.tick_circle,
+                      onPressed: () => _confirmDelivery(context),
+                    ),
+                  ],
+                ],
               ),
-            ],
+      ),
+    );
+  }
+}
+
+class _DetailRetryState extends StatelessWidget {
+  const _DetailRetryState({required this.error, required this.onRetry});
+
+  final String error;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(error, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: onRetry,
+              child: const Text('إعادة المحاولة'),
+            ),
           ],
         ),
       ),
@@ -332,13 +453,16 @@ class _CustomerSummaryTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    order.phone,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: mutedColor,
-                      fontWeight: FontWeight.w800,
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text(
+                      order.phone,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: mutedColor,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ],
@@ -488,11 +612,23 @@ class _ProductRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            AppCurrency.format(item.price * item.quantity),
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w900),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                AppCurrency.format(item.total),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              Text(
+                AppCurrency.format(item.price),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.lightTextSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
         ],
       ),

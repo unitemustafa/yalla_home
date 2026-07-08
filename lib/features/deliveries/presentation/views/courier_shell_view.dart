@@ -36,7 +36,7 @@ class _CourierShellViewState extends State<CourierShellView> {
   }
 
   List<CourierOrder> get _activeOrders {
-    return _orders.where((order) => !order.isDelivered).toList();
+    return _orders.where((order) => !order.isTerminal).toList();
   }
 
   List<CourierOrder> get _deliveredOrders {
