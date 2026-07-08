@@ -16,7 +16,10 @@ void main() {
     await tester.pump();
 
     expect(find.text('أهلاً يا كابتن'), findsOneWidget);
-    expect(find.text('رقم الموبايل أو الإيميل'), findsOneWidget);
+    expect(
+      find.text('رقم الموبايل أو الإيميل أو اسم المستخدم'),
+      findsOneWidget,
+    );
     expect(find.text('دخول Demo'), findsNothing);
     expect(find.text('تذكرني'), findsOneWidget);
     expect(find.text('الدعم الفني'), findsOneWidget);
@@ -39,7 +42,7 @@ void main() {
   ) async {
     final now = DateTime(2026, 6, 15, 12, 43);
     final activeOrder = _order(
-      status: CourierOrderStatus.assigned,
+      status: CourierOrderStatus.ready,
       expectedDeliveryAt: now,
     );
     final deliveredOrder = _order(
@@ -56,7 +59,7 @@ void main() {
 
     expect(find.text('الوصول'), findsNothing);
     expect(find.text('12:43'), findsNothing);
-    expect(find.text('مطلوب الاستلام'), findsOneWidget);
+    expect(find.text('جاهز'), findsOneWidget);
 
     await tester.pumpWidget(
       _TestApp(
@@ -135,9 +138,20 @@ CourierOrder _order({
     address: 'شارع التحرير، الدقي',
     area: 'الدقي',
     total: 845,
+    deliveryPrice: 45,
     status: status,
+    rawStatus: switch (status) {
+      CourierOrderStatus.ready => 'ready',
+      CourierOrderStatus.delivered => 'delivered',
+      _ => status.name,
+    },
     createdAt: expectedDeliveryAt.subtract(const Duration(hours: 1)),
     expectedDeliveryAt: expectedDeliveryAt,
+    itemsCount: 1,
+    marketName: 'محل تجريبي',
+    marketBranch: 'فرع تجريبي',
+    marketCount: 1,
+    marketSummary: 'محل تجريبي',
     deliveredAt: deliveredAt,
     items: const [
       CourierOrderItem(name: 'منتج تجريبي', quantity: 1, price: 845),
