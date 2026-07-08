@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -5,13 +6,22 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../network/api_exception.dart';
+import 'session_expired_notifier.dart';
 
 class AuthSession {
   AuthSession._();
 
   static final instance = AuthSession._();
+
   static const _refreshKey = 'yalla_home_refresh_token';
+  static const _rememberKey = 'yalla_home_remember_session';
+  static const _expiresAtKey = 'yalla_home_session_expires_at';
+  static const _temporarySessionMarkerKey =
+      'yalla_home_temporary_session_existed';
+  static const _rememberedSessionDuration = Duration(days: 7);
+  static const _temporarySessionDuration = Duration(hours: 8);
   static const _configuredApiBaseUrl = String.fromEnvironment('API_BASE_URL');
+
   static String get apiBaseUrl {
     final configured = _configuredApiBaseUrl.trim();
     final baseUrl = configured.isNotEmpty
@@ -31,8 +41,16 @@ class AuthSession {
 
   final _client = http.Client();
   final _storage = const FlutterSecureStorage();
+
   String? _accessToken;
   String? _refreshToken;
+  Future<void>? _refreshInFlight;
+  Timer? _expiryTimer;
+  DateTime? _sessionExpiresAt;
+  bool _rememberSession = false;
+  bool _sessionExpiredEventSent = false;
+  int _sessionVersion = 0;
+
   Map<String, dynamic>? currentUser;
 
   Uri uri(String path) =>
@@ -48,16 +66,37 @@ class AuthSession {
 
   Future<bool> restore() async {
     final savedRefresh = await _storage.read(key: _refreshKey);
-    if (savedRefresh == null || savedRefresh.isEmpty) return false;
+    final hadTemporarySession = await _storage.read(
+      key: _temporarySessionMarkerKey,
+    );
+
+    if (savedRefresh == null || savedRefresh.isEmpty) {
+      if (hadTemporarySession != null) {
+        await _expireSession(notify: true);
+      }
+      return false;
+    }
+
+    final expiresAt = await _readPersistedExpiry();
+    if (expiresAt == null || !_isBeforeExpiry(expiresAt)) {
+      await _expireSession(notify: true);
+      return false;
+    }
+
     _refreshToken = savedRefresh;
+    _sessionExpiresAt = expiresAt;
+    _rememberSession = true;
+    _sessionExpiredEventSent = false;
+    _scheduleExpiryTimer();
+
     try {
-      await _refresh();
+      await _refreshOnce();
       currentUser = await getJson('auth/me/') as Map<String, dynamic>;
       if (currentUser?['role'] == 'representative') return true;
-      await clear();
+      await _expireSession(notify: true);
       return false;
     } catch (_) {
-      await clear();
+      await _expireSession(notify: true);
       return false;
     }
   }
@@ -67,18 +106,27 @@ class AuthSession {
     required String password,
     required bool remember,
   }) async {
+    final cleanIdentifier = _removeWhitespace(identifier);
+    final cleanPassword = _removeWhitespace(password);
     final response = await _client.post(
       uri('auth/login/representative/'),
       headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({'identifier': identifier, 'password': password}),
+      body: jsonEncode({
+        'identifier': cleanIdentifier,
+        'password': cleanPassword,
+      }),
     );
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
-        _message(data, 'تعذر تسجيل الدخول.'),
+        _message(
+          data,
+          '\u062a\u0639\u0630\u0631 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644.',
+        ),
         statusCode: response.statusCode,
       );
     }
+
     final map = data as Map<String, dynamic>;
     _accessToken = map['accessToken']?.toString();
     _refreshToken = map['refreshToken']?.toString();
@@ -87,16 +135,37 @@ class AuthSession {
         _refreshToken == null ||
         currentUser?['role'] != 'representative') {
       await clear();
-      throw const ApiException('استجابة تسجيل الدخول غير مكتملة.');
+      throw const ApiException(
+        '\u0627\u0633\u062a\u062c\u0627\u0628\u0629 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u063a\u064a\u0631 \u0645\u0643\u062a\u0645\u0644\u0629.',
+      );
     }
+
+    _sessionVersion += 1;
+    _rememberSession = remember;
+    _sessionExpiredEventSent = false;
+    _sessionExpiresAt = DateTime.now().toUtc().add(
+      remember ? _rememberedSessionDuration : _temporarySessionDuration,
+    );
+    _scheduleExpiryTimer();
+
     if (remember) {
       await _storage.write(key: _refreshKey, value: _refreshToken);
+      await _storage.write(key: _rememberKey, value: 'true');
+      await _storage.write(
+        key: _expiresAtKey,
+        value: _sessionExpiresAt!.toIso8601String(),
+      );
+      await _storage.delete(key: _temporarySessionMarkerKey);
     } else {
       await _storage.delete(key: _refreshKey);
+      await _storage.delete(key: _rememberKey);
+      await _storage.delete(key: _expiresAtKey);
+      await _storage.write(key: _temporarySessionMarkerKey, value: 'true');
     }
   }
 
   Future<dynamic> getJson(String path) async {
+    await _ensureSessionStillActive();
     var response = await _authorizedGet(path);
     if (response.statusCode == 401 && await _tryRefresh()) {
       response = await _authorizedGet(path);
@@ -104,7 +173,10 @@ class AuthSession {
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
-        _message(data, 'تعذر تحميل البيانات.'),
+        _message(
+          data,
+          '\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a.',
+        ),
         statusCode: response.statusCode,
       );
     }
@@ -117,6 +189,7 @@ class AuthSession {
     List<int>? proofBytes,
     String? proofName,
   }) async {
+    await _ensureSessionStillActive();
     Future<http.StreamedResponse> send() async {
       final request = http.MultipartRequest('POST', uri(path));
       request.headers['Authorization'] = 'Bearer $_accessToken';
@@ -143,7 +216,10 @@ class AuthSession {
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
-        _message(data, 'تعذر تأكيد التسليم.'),
+        _message(
+          data,
+          '\u062a\u0639\u0630\u0631 \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u062a\u0633\u0644\u064a\u0645.',
+        ),
         statusCode: response.statusCode,
       );
     }
@@ -170,10 +246,20 @@ class AuthSession {
   }
 
   Future<void> clear() async {
+    _sessionVersion += 1;
     _accessToken = null;
     _refreshToken = null;
+    _sessionExpiresAt = null;
+    _rememberSession = false;
+    _sessionExpiredEventSent = false;
+    _refreshInFlight = null;
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
     currentUser = null;
     await _storage.delete(key: _refreshKey);
+    await _storage.delete(key: _rememberKey);
+    await _storage.delete(key: _expiresAtKey);
+    await _storage.delete(key: _temporarySessionMarkerKey);
   }
 
   Future<http.Response> _authorizedGet(String path) {
@@ -185,17 +271,49 @@ class AuthSession {
 
   Future<bool> _tryRefresh() async {
     try {
-      await _refresh();
-      return true;
+      await _refreshOnce();
+      return _accessToken != null;
     } catch (_) {
-      await clear();
+      await _expireSession(notify: true);
       return false;
     }
   }
 
+  Future<void> _refreshOnce() async {
+    final activeRefresh = _refreshInFlight;
+
+    if (activeRefresh != null) {
+      await activeRefresh;
+      return;
+    }
+
+    final refreshFuture = _refresh();
+    _refreshInFlight = refreshFuture;
+
+    try {
+      await refreshFuture;
+    } finally {
+      if (identical(_refreshInFlight, refreshFuture)) {
+        _refreshInFlight = null;
+      }
+    }
+  }
+
   Future<void> _refresh() async {
+    if (_isSessionExpired()) {
+      throw const ApiException(
+        '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
+      );
+    }
+
+    final refreshVersion = _sessionVersion;
     final refresh = _refreshToken;
-    if (refresh == null) throw const ApiException('لا توجد جلسة محفوظة.');
+    if (refresh == null) {
+      throw const ApiException(
+        '\u0644\u0627 \u062a\u0648\u062c\u062f \u062c\u0644\u0633\u0629 \u0645\u062d\u0641\u0648\u0638\u0629.',
+      );
+    }
+
     final response = await _client.post(
       uri('auth/refresh/'),
       headers: const {'Content-Type': 'application/json'},
@@ -204,16 +322,75 @@ class AuthSession {
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
-        _message(data, 'انتهت الجلسة.'),
+        _message(
+          data,
+          '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
+        ),
         statusCode: response.statusCode,
       );
     }
+
+    if (refreshVersion != _sessionVersion) return;
+
     final map = data as Map<String, dynamic>;
     _accessToken = map['accessToken']?.toString();
     _refreshToken = map['refreshToken']?.toString() ?? refresh;
-    final persisted = await _storage.read(key: _refreshKey);
-    if (persisted != null) {
+    if (_rememberSession) {
       await _storage.write(key: _refreshKey, value: _refreshToken);
+    }
+  }
+
+  Future<DateTime?> _readPersistedExpiry() async {
+    final value = await _storage.read(key: _expiresAtKey);
+    if (value == null || value.isEmpty) return null;
+    return DateTime.tryParse(value)?.toUtc();
+  }
+
+  bool _isBeforeExpiry(DateTime expiresAt) {
+    return DateTime.now().toUtc().isBefore(expiresAt);
+  }
+
+  bool _isSessionExpired() {
+    final expiresAt = _sessionExpiresAt;
+    return expiresAt == null || !_isBeforeExpiry(expiresAt);
+  }
+
+  Future<void> _ensureSessionStillActive() async {
+    if (!_isSessionExpired()) return;
+    await _expireSession(notify: true);
+    throw const ApiException(
+      '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
+    );
+  }
+
+  void _scheduleExpiryTimer() {
+    _expiryTimer?.cancel();
+    final expiresAt = _sessionExpiresAt;
+    if (expiresAt == null) return;
+    final delay = expiresAt.difference(DateTime.now().toUtc());
+    _expiryTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
+      unawaited(_expireSession(notify: true));
+    });
+  }
+
+  Future<void> _expireSession({required bool notify}) async {
+    final shouldNotify = notify && !_sessionExpiredEventSent;
+    _sessionVersion += 1;
+    _accessToken = null;
+    _refreshToken = null;
+    _sessionExpiresAt = null;
+    _rememberSession = false;
+    _refreshInFlight = null;
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
+    currentUser = null;
+    await _storage.delete(key: _refreshKey);
+    await _storage.delete(key: _rememberKey);
+    await _storage.delete(key: _expiresAtKey);
+    await _storage.delete(key: _temporarySessionMarkerKey);
+    if (shouldNotify) {
+      _sessionExpiredEventSent = true;
+      SessionExpiredNotifier.instance.notifyExpired();
     }
   }
 
@@ -237,6 +414,9 @@ class AuthSession {
       }
     }
     if (data is Map) {
+      if (data['code'] is String) {
+        return _localizedCode(data['code'] as String);
+      }
       if (data['detail'] is String) {
         return _localizedMessage(data['detail'] as String);
       }
@@ -251,17 +431,42 @@ class AuthSession {
   String _localizedMessage(String message) {
     final normalized = message.trim().toLowerCase();
     if (normalized.contains('invalid email or password')) {
-      return 'الإيميل أو كلمة السر غير صحيحين.';
+      return _invalidCredentialsMessage;
+    }
+    if (normalized.contains('this account belongs to an admin')) {
+      return _localizedCode('admin_account_not_allowed');
+    }
+    if (normalized.contains('this account belongs to a client')) {
+      return _localizedCode('client_account_not_allowed');
     }
     if (normalized.contains('this login is only for representative accounts')) {
-      return 'تسجيل الدخول هنا مخصص لحسابات المندوبين فقط.';
+      return _localizedCode('representative_account_required');
     }
     if (normalized.contains('account email has not been verified')) {
-      return 'الحساب لم يتم تفعيله بعد.';
+      return '\u0627\u0644\u062d\u0633\u0627\u0628 \u0644\u0645 \u064a\u062a\u0645 \u062a\u0641\u0639\u064a\u0644\u0647 \u0628\u0639\u062f.';
     }
     if (normalized.contains('not found')) {
-      return 'المسار غير موجود. تأكد من إعداد رابط الخادم.';
+      return '\u0627\u0644\u0645\u0633\u0627\u0631 \u063a\u064a\u0631 \u0645\u0648\u062c\u0648\u062f. \u062a\u0623\u0643\u062f \u0645\u0646 \u0625\u0639\u062f\u0627\u062f \u0631\u0627\u0628\u0637 \u0627\u0644\u062e\u0627\u062f\u0645.';
     }
     return message;
   }
+
+  String _localizedCode(String code) {
+    return switch (code.trim()) {
+      'admin_account_not_allowed' =>
+        '\u0647\u0630\u0627 \u062d\u0633\u0627\u0628 \u0645\u0633\u0624\u0648\u0644\u060c \u0633\u062c\u0651\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0645\u0646 \u0644\u0648\u062d\u0629 \u0627\u0644\u0625\u062f\u0627\u0631\u0629.',
+      'client_account_not_allowed' =>
+        '\u0647\u0630\u0627 \u062d\u0633\u0627\u0628 \u0639\u0645\u064a\u0644\u060c \u0627\u0633\u062a\u062e\u062f\u0645 \u062a\u0637\u0628\u064a\u0642 \u064a\u0644\u0627 \u0645\u0627\u0631\u0643\u062a.',
+      'representative_account_required' =>
+        '\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0647\u0646\u0627 \u0645\u062e\u0635\u0635 \u0644\u062d\u0633\u0627\u0628\u0627\u062a \u0627\u0644\u0645\u0646\u062f\u0648\u0628\u064a\u0646 \u0641\u0642\u0637.',
+      _ => code,
+    };
+  }
+
+  String _removeWhitespace(String value) {
+    return value.replaceAll(RegExp(r'\s+'), '');
+  }
+
+  static const _invalidCredentialsMessage =
+      '\u0627\u0644\u0625\u064a\u0645\u064a\u0644 \u0623\u0648 \u0643\u0644\u0645\u0629 \u0627\u0644\u0633\u0631 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d\u064a\u0646.';
 }

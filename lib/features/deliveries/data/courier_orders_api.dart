@@ -5,7 +5,7 @@ class CourierOrdersApi {
   const CourierOrdersApi();
 
   Future<List<CourierOrder>> loadOrders() async {
-    final data = await AuthSession.instance.getJson('orders/assigned/');
+    final data = await AuthSession.instance.getJson('courier/orders/');
     return (data as List<dynamic>)
         .whereType<Map<String, dynamic>>()
         .map(CourierOrder.fromJson)

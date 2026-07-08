@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/auth/auth_session.dart';
@@ -40,6 +41,8 @@ class _LoginViewState extends State<LoginView> {
   }
 
   Future<void> _signIn() async {
+    if (_isLoading) return;
+    _removeWhitespaceFromControllers();
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _isLoading = true);
@@ -63,6 +66,20 @@ class _LoginViewState extends State<LoginView> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _removeWhitespaceFromControllers() {
+    _removeWhitespace(_identifierController);
+    _removeWhitespace(_passwordController);
+  }
+
+  void _removeWhitespace(TextEditingController controller) {
+    final cleanText = controller.text.replaceAll(RegExp(r'\s+'), '');
+    if (cleanText == controller.text) return;
+    controller.value = TextEditingValue(
+      text: cleanText,
+      selection: TextSelection.collapsed(offset: cleanText.length),
+    );
   }
 
   void _goToDashboard() {
@@ -157,10 +174,11 @@ class _LoginViewState extends State<LoginView> {
                             const SizedBox(height: 30),
                             _LoginTextField(
                               controller: _identifierController,
-                              keyboardType: TextInputType.emailAddress,
+                              keyboardType: TextInputType.text,
                               validator: _validateIdentifier,
                               textInputAction: TextInputAction.next,
-                              labelText: 'رقم الموبايل أو الإيميل',
+                              labelText:
+                                  'رقم الموبايل أو الإيميل أو اسم المستخدم',
                               prefixIcon: AppIcons.direct_right,
                             ),
                             _LoginTextField(
@@ -324,6 +342,10 @@ class _LoginTextField extends StatelessWidget {
   final ValueChanged<String>? onFieldSubmitted;
   final VoidCallback? onSuffixIconPressed;
 
+  static final _noWhitespaceFormatter = FilteringTextInputFormatter.deny(
+    RegExp(r'\s'),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -346,6 +368,7 @@ class _LoginTextField extends StatelessWidget {
         obscureText: obscureText,
         keyboardType: keyboardType,
         validator: validator,
+        inputFormatters: [_noWhitespaceFormatter],
         textInputAction: textInputAction,
         onFieldSubmitted: onFieldSubmitted,
         cursorColor: theme.colorScheme.primary,
