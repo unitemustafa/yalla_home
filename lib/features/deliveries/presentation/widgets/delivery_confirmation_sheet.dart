@@ -1,19 +1,13 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
-import '../../../../core/constants/app_colors.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/app_action_button.dart';
 import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
-import '../../domain/courier_order.dart';
 
 class DeliveryConfirmationResult {
-  const DeliveryConfirmationResult({this.proof, this.note});
+  const DeliveryConfirmationResult({required this.note});
 
-  final DeliveryProof? proof;
-  final String? note;
+  final String note;
 }
 
 class DeliveryConfirmationSheet extends StatefulWidget {
@@ -28,10 +22,6 @@ class DeliveryConfirmationSheet extends StatefulWidget {
 
 class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
   final _noteController = TextEditingController();
-  final _picker = ImagePicker();
-  XFile? _pickedFile;
-  Uint8List? _previewBytes;
-  bool _isPicking = false;
 
   @override
   void dispose() {
@@ -39,54 +29,17 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
     super.dispose();
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      setState(() => _isPicking = true);
-      final file = await _picker.pickImage(
-        source: source,
-        imageQuality: 82,
-        maxWidth: 1600,
-      );
-      if (file == null) return;
-      final bytes = await file.readAsBytes();
-      if (!mounted) return;
-      setState(() {
-        _pickedFile = file;
-        _previewBytes = bytes;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      CustomSnackBar.showError(
-        context: context,
-        title: 'تعذر اختيار الصورة، حاول مرة أخرى.',
-      );
-    } finally {
-      if (mounted) setState(() => _isPicking = false);
-    }
-  }
-
   Future<void> _confirm() async {
-    final file = _pickedFile;
-    final bytes = _previewBytes;
-    final proof = file != null && bytes != null
-        ? DeliveryProof(fileName: file.name, bytes: bytes)
-        : null;
     final note = _noteController.text.trim();
-    if (proof == null && note.isEmpty) {
+    if (note.isEmpty) {
       CustomSnackBar.showError(
         context: context,
-        title: 'أضف صورة إثبات أو ملاحظة قبل تأكيد التسليم.',
+        title: 'أضف ملاحظة التسليم قبل التأكيد.',
       );
       return;
     }
 
-    Navigator.pop(
-      context,
-      DeliveryConfirmationResult(
-        proof: proof,
-        note: note.isEmpty ? null : note,
-      ),
-    );
+    Navigator.pop(context, DeliveryConfirmationResult(note: note));
   }
 
   @override
@@ -138,7 +91,7 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'ارفع صورة توقيع العميل أو إثبات التسليم لطلب ${widget.orderId}.',
+                  'أضف ملاحظة التسليم لطلب ${widget.orderId}.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: mutedColor,
                     fontWeight: FontWeight.w700,
@@ -146,20 +99,12 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _ProofPicker(
-                  bytes: _previewBytes,
-                  mutedColor: mutedColor,
-                  isPicking: _isPicking,
-                  onCameraPressed: () => _pickImage(ImageSource.camera),
-                  onGalleryPressed: () => _pickImage(ImageSource.gallery),
-                ),
-                const SizedBox(height: 14),
                 TextField(
                   controller: _noteController,
                   minLines: 3,
                   maxLines: 5,
                   decoration: const InputDecoration(
-                    labelText: 'ملاحظة اختيارية',
+                    labelText: 'ملاحظة التسليم',
                     alignLabelWithHint: true,
                   ),
                 ),
@@ -167,97 +112,12 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
                 AppActionButton(
                   label: 'تأكيد',
                   icon: AppIcons.tick_circle,
-                  onPressed: _isPicking ? null : _confirm,
+                  onPressed: _confirm,
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ProofPicker extends StatelessWidget {
-  const _ProofPicker({
-    required this.bytes,
-    required this.mutedColor,
-    required this.isPicking,
-    required this.onCameraPressed,
-    required this.onGalleryPressed,
-  });
-
-  final Uint8List? bytes;
-  final Color mutedColor;
-  final bool isPicking;
-  final VoidCallback onCameraPressed;
-  final VoidCallback onGalleryPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final borderColor = Theme.of(context).brightness == Brightness.dark
-        ? Colors.white.withValues(alpha: 0.10)
-        : Colors.black.withValues(alpha: 0.06);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor),
-        color: AppColors.primary.withValues(alpha: 0.04),
-      ),
-      child: Column(
-        children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.04),
-                ),
-                child: bytes == null
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(AppIcons.image, color: mutedColor, size: 30),
-                          const SizedBox(height: 8),
-                          Text(
-                            'لا توجد صورة مرفوعة',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: mutedColor,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                          ),
-                        ],
-                      )
-                    : Image.memory(bytes!, fit: BoxFit.cover),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: isPicking ? null : onCameraPressed,
-                  icon: const Icon(AppIcons.camera, size: 18),
-                  label: const Text('كاميرا'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: isPicking ? null : onGalleryPressed,
-                  icon: const Icon(AppIcons.image, size: 18),
-                  label: const Text('المعرض'),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

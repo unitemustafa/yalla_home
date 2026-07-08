@@ -28,23 +28,12 @@ class CourierOrdersApi {
 
   Future<CourierOrder> markDelivered(
     String orderId, {
-    String? note,
-    DeliveryProof? proof,
+    required String note,
   }) async {
-    final data = proof == null
-        ? await AuthSession.instance
-              .patchJson('courier/orders/$orderId/status/', {
-                'status': 'delivered',
-                if (note != null && note.trim().isNotEmpty)
-                  'delivery_note': note.trim(),
-              })
-        : await AuthSession.instance.patchMultipart(
-            'courier/orders/$orderId/status/',
-            status: 'delivered',
-            deliveryNote: note,
-            deliveryProofBytes: proof.bytes,
-            deliveryProofName: proof.fileName,
-          );
+    final data = await AuthSession.instance.patchJson(
+      'courier/orders/$orderId/status/',
+      {'status': 'delivered', 'delivery_note': note.trim()},
+    );
     return CourierOrder.fromJson(data as Map<String, dynamic>);
   }
 }

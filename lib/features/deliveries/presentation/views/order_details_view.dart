@@ -11,7 +11,6 @@ import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 import '../../data/courier_orders_api.dart';
 import '../../domain/courier_order.dart';
 import '../widgets/delivery_confirmation_sheet.dart';
-import 'courier_tracking_map_view.dart';
 
 typedef OrderPickedUpHandler = Future<CourierOrder> Function(String orderId);
 typedef OrderDeliveredHandler =
@@ -112,18 +111,6 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
     );
   }
 
-  void _openMap(BuildContext context) {
-    if (_order.customerLocation == null) {
-      _showMessage('موقع العميل غير متاح لهذا الطلب.');
-      return;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => CourierTrackingMapView(order: _order)),
-    );
-  }
-
   Future<void> _markPickedUp() async {
     if (_submittingAction != null || !_order.canMarkPickedUp) return;
 
@@ -158,11 +145,7 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
       final handler =
           widget.onDelivered ??
           (String orderId, DeliveryConfirmationResult result) {
-            return _api.markDelivered(
-              orderId,
-              note: result.note,
-              proof: result.proof,
-            );
+            return _api.markDelivered(orderId, note: result.note);
           };
       final updated = await handler(_order.id, result);
       if (!mounted) return;
@@ -290,9 +273,9 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
                     _DeliveryProofCard(order: order, mutedColor: mutedColor),
                   ],
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      if (order.phone.isNotEmpty) ...[
+                  if (order.phone.isNotEmpty)
+                    Row(
+                      children: [
                         Expanded(
                           child: OutlinedButton.icon(
                             onPressed: () => _showContactOptions(context),
@@ -300,17 +283,8 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
                             label: const Text('تواصل'),
                           ),
                         ),
-                        const SizedBox(width: 10),
                       ],
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _openMap(context),
-                          icon: const Icon(AppIcons.routing, size: 18),
-                          label: const Text('الخريطة'),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
                   if (order.canMarkPickedUp || order.canMarkDelivered) ...[
                     const SizedBox(height: 12),
                     _LifecycleActions(

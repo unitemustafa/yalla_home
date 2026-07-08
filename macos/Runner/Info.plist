@@ -24,10 +24,6 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
-	<key>NSCameraUsageDescription</key>
-	<string>يحتاج التطبيق لاستخدام الكاميرا لرفع صورة إثبات التسليم.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>يحتاج التطبيق للوصول للصور لاختيار إثبات التسليم.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

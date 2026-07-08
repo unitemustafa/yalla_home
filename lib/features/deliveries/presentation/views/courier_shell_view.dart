@@ -77,11 +77,7 @@ class _CourierShellViewState extends State<CourierShellView> {
     String orderId,
     DeliveryConfirmationResult result,
   ) async {
-    final delivered = await _api.markDelivered(
-      orderId,
-      note: result.note,
-      proof: result.proof,
-    );
+    final delivered = await _api.markDelivered(orderId, note: result.note);
     if (!mounted) return delivered;
     setState(() {
       _replaceOrder(delivered);

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -105,6 +107,81 @@ void main() {
       CourierOrderStatus.assigned,
       CourierOrderStatus.pickedUp,
     ]);
+
+    final pickedUpOrder = _order(
+      status: CourierOrderStatus.assigned,
+      expectedDeliveryAt: DateTime(2026, 6, 15, 12, 43),
+    ).copyWith(status: CourierOrderStatus.pickedUp, rawStatus: 'picked_up');
+    final deliveredOrder = pickedUpOrder.copyWith(
+      status: CourierOrderStatus.delivered,
+      rawStatus: 'delivered',
+      deliveredAt: DateTime(2026, 6, 15, 13, 10),
+      deliveryNote: 'تم التسليم للعميل',
+    );
+
+    expect(pickedUpOrder.canMarkDelivered, isTrue);
+    expect(deliveredOrder.isDelivered, isTrue);
+    expect(deliveredOrder.canMarkDelivered, isFalse);
+    expect(deliveredOrder.deliveryNote, 'تم التسليم للعميل');
+  });
+
+  testWidgets(
+    'delivery confirmation requires a note and has no proof controls',
+    (WidgetTester tester) async {
+      DeliveryConfirmationResult? result;
+
+      await tester.pumpWidget(
+        _TestApp(
+          child: DeliveryConfirmationSheetHost(
+            onResult: (value) => result = value,
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('فتح تأكيد التسليم'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('كاميرا'), findsNothing);
+      expect(find.text('المعرض'), findsNothing);
+      expect(find.text('لا توجد صورة مرفوعة'), findsNothing);
+
+      await tester.tap(find.text('تأكيد'));
+      await tester.pump();
+
+      expect(result, isNull);
+      expect(find.text('أضف ملاحظة التسليم قبل التأكيد.'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'تم التسليم للعميل');
+      await tester.tap(find.text('تأكيد'));
+      await tester.pumpAndSettle();
+
+      expect(result?.note, 'تم التسليم للعميل');
+    },
+  );
+
+  test('delivery confirmation API uses JSON status update without proof', () {
+    final source = File(
+      'lib/features/deliveries/data/courier_orders_api.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('patchJson'));
+    expect(source, contains("'status': 'delivered'"));
+    expect(source, contains("'delivery_note': note.trim()"));
+    expect(source, isNot(contains('DeliveryProof')));
+    expect(source, isNot(contains('patchMultipart')));
+    expect(source, isNot(contains('deliveryProof')));
+  });
+
+  test('order details exposes contact action without map navigation', () {
+    final source = File(
+      'lib/features/deliveries/presentation/views/order_details_view.dart',
+    ).readAsStringSync();
+
+    expect(source, contains("label: const Text('تواصل')"));
+    expect(source, isNot(contains("label: const Text('الخريطة')")));
+    expect(source, isNot(contains('_openMap')));
+    expect(source, isNot(contains('CourierTrackingMapView')));
+    expect(source, isNot(contains('courier_tracking_map_view.dart')));
   });
 
   testWidgets('orders screen receives active orders without status filters', (
@@ -182,6 +259,30 @@ void main() {
 
     AppThemeController.instance.setThemeMode(ThemeMode.system);
   });
+}
+
+class DeliveryConfirmationSheetHost extends StatelessWidget {
+  const DeliveryConfirmationSheetHost({super.key, required this.onResult});
+
+  final ValueChanged<DeliveryConfirmationResult> onResult;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ElevatedButton(
+        onPressed: () async {
+          final result = await showModalBottomSheet<DeliveryConfirmationResult>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const DeliveryConfirmationSheet(orderId: 'YM-1'),
+          );
+          if (result != null) onResult(result);
+        },
+        child: const Text('فتح تأكيد التسليم'),
+      ),
+    );
+  }
 }
 
 class _TestApp extends StatelessWidget {

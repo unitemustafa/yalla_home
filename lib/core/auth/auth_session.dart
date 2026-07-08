@@ -265,50 +265,6 @@ class AuthSession {
     return data;
   }
 
-  Future<dynamic> patchMultipart(
-    String path, {
-    required String status,
-    String? deliveryNote,
-    List<int>? deliveryProofBytes,
-    String? deliveryProofName,
-  }) async {
-    Future<http.StreamedResponse> send() async {
-      final request = http.MultipartRequest('PATCH', uri(path));
-      request.headers['Authorization'] = 'Bearer $_accessToken';
-      request.fields['status'] = status;
-      if (deliveryNote != null && deliveryNote.trim().isNotEmpty) {
-        request.fields['delivery_note'] = deliveryNote.trim();
-      }
-      if (deliveryProofBytes != null && deliveryProofName != null) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'delivery_proof',
-            deliveryProofBytes,
-            filename: deliveryProofName,
-          ),
-        );
-      }
-      return request.send();
-    }
-
-    final streamed = await _sendWithRefresh<http.StreamedResponse>(
-      send: send,
-      statusCode: (response) => response.statusCode,
-    );
-    final response = await http.Response.fromStream(streamed);
-    final data = _decode(response);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _message(
-          data,
-          '\u062a\u0639\u0630\u0631 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0637\u0644\u0628.',
-        ),
-        statusCode: response.statusCode,
-      );
-    }
-    return data;
-  }
-
   Future<void> logout() async {
     final refresh = _refreshToken;
     if (refresh != null && _accessToken != null) {
