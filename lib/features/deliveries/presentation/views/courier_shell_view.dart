@@ -36,7 +36,7 @@ class _CourierShellViewState extends State<CourierShellView> {
   }
 
   List<CourierOrder> get _activeOrders {
-    return _orders.where((order) => !order.isTerminal).toList();
+    return _orders.where((order) => order.isActiveCourierOrder).toList();
   }
 
   List<CourierOrder> get _deliveredOrders {
@@ -66,23 +66,35 @@ class _CourierShellViewState extends State<CourierShellView> {
     }
   }
 
-  Future<void> _markDelivered(
+  Future<CourierOrder> _markPickedUp(String orderId) async {
+    final pickedUp = await _api.markPickedUp(orderId);
+    if (!mounted) return pickedUp;
+    setState(() => _replaceOrder(pickedUp));
+    return pickedUp;
+  }
+
+  Future<CourierOrder> _markDelivered(
     String orderId,
     DeliveryConfirmationResult result,
   ) async {
-    final delivered = await _api.deliver(
+    final delivered = await _api.markDelivered(
       orderId,
       note: result.note,
       proof: result.proof,
     );
-    if (!mounted) return;
+    if (!mounted) return delivered;
     setState(() {
-      _orders = [
-        for (final order in _orders)
-          if (order.id == orderId) delivered else order,
-      ];
+      _replaceOrder(delivered);
       _selectedIndex = 1;
     });
+    return delivered;
+  }
+
+  void _replaceOrder(CourierOrder updated) {
+    _orders = [
+      for (final order in _orders)
+        if (order.id == updated.id) updated else order,
+    ];
   }
 
   Future<void> _logout() async {
@@ -100,6 +112,7 @@ class _CourierShellViewState extends State<CourierShellView> {
     final screens = [
       CourierOrdersView(
         orders: _activeOrders,
+        onPickedUp: _markPickedUp,
         onDelivered: _markDelivered,
         onRefresh: _loadOrders,
       ),
@@ -162,8 +175,11 @@ class _CourierShellViewState extends State<CourierShellView> {
     Navigator.push(
       context,
       MaterialPageRoute<void>(
-        builder: (_) =>
-            OrderDetailsView(order: order, onDelivered: _markDelivered),
+        builder: (_) => OrderDetailsView(
+          order: order,
+          onPickedUp: _markPickedUp,
+          onDelivered: _markDelivered,
+        ),
       ),
     );
   }

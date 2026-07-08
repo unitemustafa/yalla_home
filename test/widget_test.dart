@@ -4,7 +4,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:yalla_home/core/theme/app_theme_controller.dart';
 import 'package:yalla_home/features/deliveries/domain/courier_order.dart';
+import 'package:yalla_home/features/deliveries/presentation/views/courier_orders_view.dart';
 import 'package:yalla_home/features/deliveries/presentation/views/courier_profile_view.dart';
+import 'package:yalla_home/features/deliveries/presentation/widgets/delivery_confirmation_sheet.dart';
 import 'package:yalla_home/features/deliveries/presentation/widgets/order_card.dart';
 import 'package:yalla_home/yalla_home_app.dart';
 
@@ -42,7 +44,7 @@ void main() {
   ) async {
     final now = DateTime(2026, 6, 15, 12, 43);
     final activeOrder = _order(
-      status: CourierOrderStatus.ready,
+      status: CourierOrderStatus.assigned,
       expectedDeliveryAt: now,
     );
     final deliveredOrder = _order(
@@ -59,7 +61,7 @@ void main() {
 
     expect(find.text('الوصول'), findsNothing);
     expect(find.text('12:43'), findsNothing);
-    expect(find.text('جاهز'), findsOneWidget);
+    expect(find.text('مطلوب الاستلام'), findsOneWidget);
 
     await tester.pumpWidget(
       _TestApp(
@@ -73,6 +75,78 @@ void main() {
 
     expect(find.text('وقت التسليم'), findsOneWidget);
     expect(find.text('12:43'), findsOneWidget);
+  });
+
+  test('parses authoritative courier statuses and safe legacy statuses', () {
+    expect(courierOrderStatusFromRaw('assigned'), CourierOrderStatus.assigned);
+    expect(CourierOrderStatus.assigned.label, 'مطلوب الاستلام');
+    expect(courierOrderStatusFromRaw('ready'), CourierOrderStatus.assigned);
+    expect(
+      courierOrderStatusFromRaw('on_the_way'),
+      CourierOrderStatus.pickedUp,
+    );
+    expect(
+      courierOrderStatusFromRaw('under_preparation'),
+      CourierOrderStatus.confirmed,
+    );
+  });
+
+  test('courier lifecycle helpers expose the allowed courier actions', () {
+    expect(CourierOrderStatus.assigned.requiresPickup, isTrue);
+    expect(CourierOrderStatus.assigned.canMarkPickedUp, isTrue);
+    expect(CourierOrderStatus.assigned.canMarkDelivered, isFalse);
+    expect(CourierOrderStatus.pickedUp.canMarkPickedUp, isFalse);
+    expect(CourierOrderStatus.pickedUp.canMarkDelivered, isTrue);
+
+    final activeStatuses = CourierOrderStatus.values
+        .where((status) => status.isActiveCourierOrder)
+        .toList();
+    expect(activeStatuses, [
+      CourierOrderStatus.assigned,
+      CourierOrderStatus.pickedUp,
+    ]);
+  });
+
+  testWidgets('orders screen receives active orders without status filters', (
+    WidgetTester tester,
+  ) async {
+    final now = DateTime(2026, 6, 15, 12, 43);
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierOrdersView(
+          orders: [
+            _order(
+              id: 'YM-1',
+              status: CourierOrderStatus.assigned,
+              expectedDeliveryAt: now,
+            ),
+            _order(
+              id: 'YM-2',
+              status: CourierOrderStatus.pickedUp,
+              expectedDeliveryAt: now,
+            ),
+          ],
+          onPickedUp: (orderId) async => _order(
+            id: orderId,
+            status: CourierOrderStatus.pickedUp,
+            expectedDeliveryAt: now,
+          ),
+          onDelivered: (orderId, DeliveryConfirmationResult result) async =>
+              _order(
+                id: orderId,
+                status: CourierOrderStatus.delivered,
+                expectedDeliveryAt: now,
+                deliveredAt: now,
+              ),
+          onRefresh: () async {},
+        ),
+      ),
+    );
+
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.text('مطلوب الاستلام'), findsWidgets);
+    expect(find.text('تم الاستلام'), findsWidgets);
   });
 
   testWidgets('profile stats navigate and theme can change inside app', (
@@ -127,12 +201,13 @@ class _TestApp extends StatelessWidget {
 }
 
 CourierOrder _order({
+  String id = 'YM-1',
   required CourierOrderStatus status,
   required DateTime expectedDeliveryAt,
   DateTime? deliveredAt,
 }) {
   return CourierOrder(
-    id: 'YM-1',
+    id: id,
     customerName: 'أحمد مصطفى',
     phone: '+201001234567',
     address: 'شارع التحرير، الدقي',
@@ -141,7 +216,8 @@ CourierOrder _order({
     deliveryPrice: 45,
     status: status,
     rawStatus: switch (status) {
-      CourierOrderStatus.ready => 'ready',
+      CourierOrderStatus.assigned => 'assigned',
+      CourierOrderStatus.pickedUp => 'picked_up',
       CourierOrderStatus.delivered => 'delivered',
       _ => status.name,
     },

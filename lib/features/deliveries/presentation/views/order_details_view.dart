@@ -13,13 +13,25 @@ import '../../domain/courier_order.dart';
 import '../widgets/delivery_confirmation_sheet.dart';
 import 'courier_tracking_map_view.dart';
 
+typedef OrderPickedUpHandler = Future<CourierOrder> Function(String orderId);
 typedef OrderDeliveredHandler =
-    Future<void> Function(String orderId, DeliveryConfirmationResult result);
+    Future<CourierOrder> Function(
+      String orderId,
+      DeliveryConfirmationResult result,
+    );
+
+enum _SubmittingOrderAction { pickup, delivery }
 
 class OrderDetailsView extends StatefulWidget {
-  const OrderDetailsView({super.key, required this.order, this.onDelivered});
+  const OrderDetailsView({
+    super.key,
+    required this.order,
+    this.onPickedUp,
+    this.onDelivered,
+  });
 
   final CourierOrder order;
+  final OrderPickedUpHandler? onPickedUp;
   final OrderDeliveredHandler? onDelivered;
 
   @override
@@ -31,6 +43,7 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
   late CourierOrder _order = widget.order;
   bool _loading = true;
   String? _error;
+  _SubmittingOrderAction? _submittingAction;
 
   @override
   void initState() {
@@ -66,7 +79,7 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
 
     if (!launched) {
       if (!context.mounted) return;
-      _showMessage(context, 'تعذر فتح واتساب على هذا الجهاز.');
+      _showMessage('تعذر فتح واتساب على هذا الجهاز.');
     }
   }
 
@@ -74,7 +87,7 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
     final uri = Uri(scheme: 'tel', path: _order.phone);
     if (!await canLaunchUrl(uri)) {
       if (!context.mounted) return;
-      _showMessage(context, 'المكالمات غير مدعومة على هذا الجهاز.');
+      _showMessage('المكالمات غير مدعومة على هذا الجهاز.');
       return;
     }
     await launchUrl(uri);
@@ -101,7 +114,7 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
 
   void _openMap(BuildContext context) {
     if (_order.customerLocation == null) {
-      _showMessage(context, 'موقع العميل غير متاح لهذا الطلب.');
+      _showMessage('موقع العميل غير متاح لهذا الطلب.');
       return;
     }
 
@@ -111,7 +124,27 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
     );
   }
 
-  Future<void> _confirmDelivery(BuildContext context) async {
+  Future<void> _markPickedUp() async {
+    if (_submittingAction != null || !_order.canMarkPickedUp) return;
+
+    setState(() => _submittingAction = _SubmittingOrderAction.pickup);
+    try {
+      final handler = widget.onPickedUp ?? _api.markPickedUp;
+      final updated = await handler(_order.id);
+      if (!mounted) return;
+      setState(() => _order = updated);
+      _showMessage('تم تسجيل الاستلام بنجاح.');
+    } catch (error) {
+      if (!mounted) return;
+      CustomSnackBar.showError(context: context, title: error.toString());
+    } finally {
+      if (mounted) setState(() => _submittingAction = null);
+    }
+  }
+
+  Future<void> _confirmDelivery() async {
+    if (_submittingAction != null || !_order.canMarkDelivered) return;
+
     final result = await showModalBottomSheet<DeliveryConfirmationResult>(
       context: context,
       isScrollControlled: true,
@@ -119,20 +152,34 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
       builder: (_) => DeliveryConfirmationSheet(orderId: _order.id),
     );
 
-    if (result == null || !context.mounted) return;
+    if (!mounted || result == null) return;
+    setState(() => _submittingAction = _SubmittingOrderAction.delivery);
     try {
-      await widget.onDelivered?.call(_order.id, result);
+      final handler =
+          widget.onDelivered ??
+          (String orderId, DeliveryConfirmationResult result) {
+            return _api.markDelivered(
+              orderId,
+              note: result.note,
+              proof: result.proof,
+            );
+          };
+      final updated = await handler(_order.id, result);
+      if (!mounted) return;
+      setState(() => _order = updated);
     } catch (error) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       CustomSnackBar.showError(context: context, title: error.toString());
       return;
+    } finally {
+      if (mounted) setState(() => _submittingAction = null);
     }
-    if (!context.mounted) return;
-    _showMessage(context, 'تم تسجيل التسليم بنجاح.');
+    if (!mounted) return;
+    _showMessage('تم تسجيل التسليم بنجاح.');
     Navigator.pop(context);
   }
 
-  void _showMessage(BuildContext context, String message) {
+  void _showMessage(String message) {
     CustomSnackBar.showInfo(context: context, title: message);
   }
 
@@ -264,12 +311,13 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
                       ),
                     ],
                   ),
-                  if (!order.isDelivered) ...[
+                  if (order.canMarkPickedUp || order.canMarkDelivered) ...[
                     const SizedBox(height: 12),
-                    AppActionButton(
-                      label: 'تم التسليم',
-                      icon: AppIcons.tick_circle,
-                      onPressed: () => _confirmDelivery(context),
+                    _LifecycleActions(
+                      order: order,
+                      submittingAction: _submittingAction,
+                      onPickupPressed: _markPickedUp,
+                      onDeliveryPressed: _confirmDelivery,
                     ),
                   ],
                 ],
@@ -302,6 +350,52 @@ class _DetailRetryState extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _LifecycleActions extends StatelessWidget {
+  const _LifecycleActions({
+    required this.order,
+    required this.submittingAction,
+    required this.onPickupPressed,
+    required this.onDeliveryPressed,
+  });
+
+  final CourierOrder order;
+  final _SubmittingOrderAction? submittingAction;
+  final VoidCallback onPickupPressed;
+  final VoidCallback onDeliveryPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final isUpdating = submittingAction != null;
+    final pickupCompleted =
+        order.status == CourierOrderStatus.pickedUp || order.isDelivered;
+
+    return Column(
+      children: [
+        AppActionButton(
+          label: 'تم الاستلام',
+          icon: pickupCompleted ? AppIcons.tick_circle : AppIcons.box,
+          variant: pickupCompleted
+              ? AppActionButtonVariant.outlined
+              : AppActionButtonVariant.filled,
+          isLoading: submittingAction == _SubmittingOrderAction.pickup,
+          onPressed: !isUpdating && order.canMarkPickedUp
+              ? onPickupPressed
+              : null,
+        ),
+        const SizedBox(height: 10),
+        AppActionButton(
+          label: 'تم التسليم',
+          icon: AppIcons.tick_circle,
+          isLoading: submittingAction == _SubmittingOrderAction.delivery,
+          onPressed: !isUpdating && order.canMarkDelivered
+              ? onDeliveryPressed
+              : null,
+        ),
+      ],
     );
   }
 }

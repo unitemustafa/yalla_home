@@ -48,6 +48,7 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
 
   List<_CourierNotificationData> get _notifications {
     final orderNotifications = widget.orders
+        .where((order) => order.isActiveCourierOrder || order.isDelivered)
         .map(_CourierNotificationData.fromOrder)
         .where((notification) => !_dismissedIds.contains(notification.id))
         .map(

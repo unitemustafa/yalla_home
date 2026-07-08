@@ -8,10 +8,8 @@ import '../../../core/constants/app_colors.dart';
 enum CourierOrderStatus {
   pending,
   confirmed,
-  underPreparation,
-  ready,
+  assigned,
   pickedUp,
-  onTheWay,
   delivered,
   failedDelivery,
   cancelled,
@@ -23,11 +21,9 @@ extension CourierOrderStatusLabel on CourierOrderStatus {
     return switch (this) {
       CourierOrderStatus.pending => 'قيد الانتظار',
       CourierOrderStatus.confirmed => 'مؤكد',
-      CourierOrderStatus.underPreparation => 'قيد التحضير',
-      CourierOrderStatus.ready => 'جاهز',
+      CourierOrderStatus.assigned => 'مطلوب الاستلام',
       CourierOrderStatus.pickedUp => 'تم الاستلام',
-      CourierOrderStatus.onTheWay => 'في الطريق',
-      CourierOrderStatus.delivered => 'مكتمل',
+      CourierOrderStatus.delivered => 'تم التسليم',
       CourierOrderStatus.failedDelivery => 'تعذر التوصيل',
       CourierOrderStatus.cancelled => 'ملغي',
       CourierOrderStatus.unknown => 'حالة غير معروفة',
@@ -38,10 +34,8 @@ extension CourierOrderStatusLabel on CourierOrderStatus {
     return switch (this) {
       CourierOrderStatus.pending => AppColors.warning,
       CourierOrderStatus.confirmed => AppColors.info,
-      CourierOrderStatus.underPreparation => AppColors.primary,
-      CourierOrderStatus.ready => AppColors.info,
+      CourierOrderStatus.assigned => AppColors.info,
       CourierOrderStatus.pickedUp => AppColors.primary,
-      CourierOrderStatus.onTheWay => AppColors.primary,
       CourierOrderStatus.delivered => AppColors.success,
       CourierOrderStatus.failedDelivery => AppColors.error,
       CourierOrderStatus.cancelled => AppColors.error,
@@ -58,17 +52,29 @@ extension CourierOrderStatusLabel on CourierOrderStatus {
     };
   }
 
-  bool get requiresPickup => this == CourierOrderStatus.ready;
+  bool get isActiveCourierOrder {
+    return this == CourierOrderStatus.assigned ||
+        this == CourierOrderStatus.pickedUp;
+  }
+
+  bool get requiresPickup => this == CourierOrderStatus.assigned;
+
+  bool get canMarkPickedUp => this == CourierOrderStatus.assigned;
+
+  bool get canMarkDelivered => this == CourierOrderStatus.pickedUp;
+
+  bool get isDelivered => this == CourierOrderStatus.delivered;
 }
 
 CourierOrderStatus courierOrderStatusFromRaw(Object? value) {
   return switch (value?.toString().trim().toLowerCase()) {
     'pending' => CourierOrderStatus.pending,
     'confirmed' => CourierOrderStatus.confirmed,
-    'under_preparation' || 'preparing' => CourierOrderStatus.underPreparation,
-    'ready' => CourierOrderStatus.ready,
+    'assigned' => CourierOrderStatus.assigned,
+    'under_preparation' || 'preparing' => CourierOrderStatus.confirmed,
+    'ready' => CourierOrderStatus.assigned,
     'picked_up' => CourierOrderStatus.pickedUp,
-    'on_the_way' => CourierOrderStatus.onTheWay,
+    'on_the_way' => CourierOrderStatus.pickedUp,
     'delivered' || 'completed' => CourierOrderStatus.delivered,
     'failed_delivery' => CourierOrderStatus.failedDelivery,
     'cancelled' || 'canceled' || 'rejected' => CourierOrderStatus.cancelled,
@@ -268,11 +274,17 @@ class CourierOrder {
 
   int get itemCount => itemsCount;
 
-  bool get isDelivered => status == CourierOrderStatus.delivered;
+  bool get isActiveCourierOrder => status.isActiveCourierOrder;
+
+  bool get isDelivered => status.isDelivered;
 
   bool get isTerminal => status.isTerminal;
 
   bool get requiresPickup => status.requiresPickup;
+
+  bool get canMarkPickedUp => status.canMarkPickedUp;
+
+  bool get canMarkDelivered => status.canMarkDelivered;
 
   CourierOrder copyWith({
     CourierOrderStatus? status,

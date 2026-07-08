@@ -12,11 +12,13 @@ class CourierOrdersView extends StatefulWidget {
   const CourierOrdersView({
     super.key,
     required this.orders,
+    required this.onPickedUp,
     required this.onDelivered,
     required this.onRefresh,
   });
 
   final List<CourierOrder> orders;
+  final OrderPickedUpHandler onPickedUp;
   final OrderDeliveredHandler onDelivered;
   final Future<void> Function() onRefresh;
 
@@ -25,24 +27,16 @@ class CourierOrdersView extends StatefulWidget {
 }
 
 class _CourierOrdersViewState extends State<CourierOrdersView> {
-  CourierOrderStatus? _selectedStatus;
-
-  List<CourierOrder> get _filteredOrders {
-    final status = _selectedStatus;
-    if (status == null) return widget.orders;
-    return widget.orders.where((order) => order.status == status).toList();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final orders = _filteredOrders;
+    final orders = widget.orders;
 
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-        itemCount: orders.isEmpty ? 4 : orders.length + 3,
+        itemCount: orders.isEmpty ? 3 : orders.length + 2,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           if (index == 0) {
@@ -56,18 +50,11 @@ class _CourierOrdersViewState extends State<CourierOrdersView> {
             return _OrdersSummaryCard(orders: widget.orders);
           }
 
-          if (index == 2) {
-            return _StatusFilters(
-              selectedStatus: _selectedStatus,
-              onChanged: (status) => setState(() => _selectedStatus = status),
-            );
-          }
-
           if (orders.isEmpty) {
             return const _EmptyOrdersState();
           }
 
-          final order = orders[index - 3];
+          final order = orders[index - 2];
           return OrderCard(order: order, onTap: () => _openDetails(order));
         },
       ),
@@ -78,8 +65,11 @@ class _CourierOrdersViewState extends State<CourierOrdersView> {
     Navigator.push(
       context,
       MaterialPageRoute<void>(
-        builder: (_) =>
-            OrderDetailsView(order: order, onDelivered: widget.onDelivered),
+        builder: (_) => OrderDetailsView(
+          order: order,
+          onPickedUp: widget.onPickedUp,
+          onDelivered: widget.onDelivered,
+        ),
       ),
     );
   }
@@ -93,7 +83,9 @@ class _OrdersSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final activeCount = orders.where((order) => !order.isTerminal).length;
+    final activeCount = orders
+        .where((order) => order.isActiveCourierOrder)
+        .length;
     final pickupRequiredCount = orders
         .where((order) => order.requiresPickup)
         .length;
@@ -129,7 +121,7 @@ class _OrdersSummaryCard extends StatelessWidget {
             icon: AppIcons.box,
             value: '$pickupRequiredCount',
             label: 'مطلوب الاستلام',
-            color: CourierOrderStatus.ready.color,
+            color: CourierOrderStatus.assigned.color,
             isDark: isDark,
           ),
           const SizedBox(width: 8),
@@ -217,55 +209,6 @@ class _SummaryPill extends StatelessWidget {
   }
 }
 
-class _StatusFilters extends StatelessWidget {
-  const _StatusFilters({required this.selectedStatus, required this.onChanged});
-
-  final CourierOrderStatus? selectedStatus;
-  final ValueChanged<CourierOrderStatus?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final filters = <({String label, CourierOrderStatus? status})>[
-      (label: 'الكل', status: null),
-      for (final status in CourierOrderStatus.values)
-        if (status != CourierOrderStatus.unknown &&
-            status != CourierOrderStatus.delivered &&
-            status != CourierOrderStatus.failedDelivery &&
-            status != CourierOrderStatus.cancelled)
-          (label: status.label, status: status),
-    ];
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final filter in filters) ...[
-            ChoiceChip(
-              label: Text(filter.label),
-              selected: selectedStatus == filter.status,
-              onSelected: (_) => onChanged(filter.status),
-              showCheckmark: false,
-              selectedColor: AppColors.primary.withValues(alpha: 0.12),
-              labelStyle: TextStyle(
-                color: selectedStatus == filter.status
-                    ? AppColors.primary
-                    : AppColors.lightTextSecondary,
-                fontWeight: FontWeight.w900,
-              ),
-              side: BorderSide(
-                color: selectedStatus == filter.status
-                    ? AppColors.primary.withValues(alpha: 0.35)
-                    : Colors.black.withValues(alpha: 0.06),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _EmptyOrdersState extends StatelessWidget {
   const _EmptyOrdersState();
 
@@ -292,7 +235,7 @@ class _EmptyOrdersState extends StatelessWidget {
           Icon(AppIcons.filter_search, size: 30, color: iconColor),
           const SizedBox(height: 10),
           Text(
-            'لا توجد طلبات بهذا الفلتر',
+            'لا توجد طلبات نشطة حاليًا',
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),

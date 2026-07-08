@@ -188,11 +188,10 @@ class AuthSession {
   }
 
   Future<dynamic> getJson(String path) async {
-    await _ensureSessionStillActive();
-    var response = await _authorizedGet(path);
-    if (response.statusCode == 401 && await _tryRefresh()) {
-      response = await _authorizedGet(path);
-    }
+    final response = await _sendWithRefresh<http.Response>(
+      send: () => _authorizedGet(path),
+      statusCode: (response) => response.statusCode,
+    );
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
@@ -206,13 +205,30 @@ class AuthSession {
     return data;
   }
 
+  Future<dynamic> patchJson(String path, Map<String, dynamic> body) async {
+    final response = await _sendWithRefresh<http.Response>(
+      send: () => _authorizedPatch(path, body),
+      statusCode: (response) => response.statusCode,
+    );
+    final data = _decode(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        _message(
+          data,
+          '\u062a\u0639\u0630\u0631 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0637\u0644\u0628.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+    return data;
+  }
+
   Future<dynamic> postMultipart(
     String path, {
     String? note,
     List<int>? proofBytes,
     String? proofName,
   }) async {
-    await _ensureSessionStillActive();
     Future<http.StreamedResponse> send() async {
       final request = http.MultipartRequest('POST', uri(path));
       request.headers['Authorization'] = 'Bearer $_accessToken';
@@ -231,10 +247,10 @@ class AuthSession {
       return request.send();
     }
 
-    var streamed = await send();
-    if (streamed.statusCode == 401 && await _tryRefresh()) {
-      streamed = await send();
-    }
+    final streamed = await _sendWithRefresh<http.StreamedResponse>(
+      send: send,
+      statusCode: (response) => response.statusCode,
+    );
     final response = await http.Response.fromStream(streamed);
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -242,6 +258,50 @@ class AuthSession {
         _message(
           data,
           '\u062a\u0639\u0630\u0631 \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u062a\u0633\u0644\u064a\u0645.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+    return data;
+  }
+
+  Future<dynamic> patchMultipart(
+    String path, {
+    required String status,
+    String? deliveryNote,
+    List<int>? deliveryProofBytes,
+    String? deliveryProofName,
+  }) async {
+    Future<http.StreamedResponse> send() async {
+      final request = http.MultipartRequest('PATCH', uri(path));
+      request.headers['Authorization'] = 'Bearer $_accessToken';
+      request.fields['status'] = status;
+      if (deliveryNote != null && deliveryNote.trim().isNotEmpty) {
+        request.fields['delivery_note'] = deliveryNote.trim();
+      }
+      if (deliveryProofBytes != null && deliveryProofName != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'delivery_proof',
+            deliveryProofBytes,
+            filename: deliveryProofName,
+          ),
+        );
+      }
+      return request.send();
+    }
+
+    final streamed = await _sendWithRefresh<http.StreamedResponse>(
+      send: send,
+      statusCode: (response) => response.statusCode,
+    );
+    final response = await http.Response.fromStream(streamed);
+    final data = _decode(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        _message(
+          data,
+          '\u062a\u0639\u0630\u0631 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0637\u0644\u0628.',
         ),
         statusCode: response.statusCode,
       );
@@ -308,6 +368,32 @@ class AuthSession {
       uri(path),
       headers: {'Authorization': 'Bearer $_accessToken'},
     );
+  }
+
+  Future<http.Response> _authorizedPatch(
+    String path,
+    Map<String, dynamic> body,
+  ) {
+    return _client.patch(
+      uri(path),
+      headers: {
+        'Authorization': 'Bearer $_accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+  }
+
+  Future<T> _sendWithRefresh<T>({
+    required Future<T> Function() send,
+    required int Function(T response) statusCode,
+  }) async {
+    await _ensureSessionStillActive();
+    var response = await send();
+    if (statusCode(response) == 401 && await _tryRefresh()) {
+      response = await send();
+    }
+    return response;
   }
 
   Future<bool> _tryRefresh() async {
