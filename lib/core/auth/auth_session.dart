@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import '../network/api_exception.dart';
 import 'session_expired_notifier.dart';
 
+enum AuthRestoreResult { restored, noSession, expired, temporaryFailure }
+
 class AuthSession {
   AuthSession._();
 
@@ -64,26 +66,39 @@ class AuthSession {
     return '$root/${text.replaceFirst(RegExp(r'^/+'), '')}';
   }
 
-  Future<bool> restore() async {
+  Future<AuthRestoreResult> restore() async {
+    final rememberValue = await _storage.read(key: _rememberKey);
     final savedRefresh = await _storage.read(key: _refreshKey);
+    final expiresAtValue = await _storage.read(key: _expiresAtKey);
     final hadTemporarySession = await _storage.read(
       key: _temporarySessionMarkerKey,
     );
 
-    if (savedRefresh == null || savedRefresh.isEmpty) {
+    final hasRememberFlag = rememberValue == 'true';
+    final hasRefresh = savedRefresh != null && savedRefresh.trim().isNotEmpty;
+    final expiresAt = DateTime.tryParse(expiresAtValue ?? '')?.toUtc();
+    final hasCompleteRememberedSession =
+        hasRememberFlag && hasRefresh && expiresAt != null;
+
+    if (!hasCompleteRememberedSession) {
+      if (hasRememberFlag || hasRefresh || (expiresAtValue ?? '').isNotEmpty) {
+        await _clearRememberedStorage();
+      }
       if (hadTemporarySession != null) {
         await _expireSession(notify: true);
+        return AuthRestoreResult.expired;
       }
-      return false;
+      return AuthRestoreResult.noSession;
     }
 
-    final expiresAt = await _readPersistedExpiry();
-    if (expiresAt == null || !_isBeforeExpiry(expiresAt)) {
+    await _storage.delete(key: _temporarySessionMarkerKey);
+
+    if (!_isBeforeExpiry(expiresAt)) {
       await _expireSession(notify: true);
-      return false;
+      return AuthRestoreResult.expired;
     }
 
-    _refreshToken = savedRefresh;
+    _refreshToken = savedRefresh.trim();
     _sessionExpiresAt = expiresAt;
     _rememberSession = true;
     _sessionExpiredEventSent = false;
@@ -91,13 +106,21 @@ class AuthSession {
 
     try {
       await _refreshOnce();
-      currentUser = await getJson('auth/me/') as Map<String, dynamic>;
-      if (currentUser?['role'] == 'representative') return true;
+      final user = await _fetchCurrentUserForRestore();
+      if (user['role'] == 'representative') {
+        currentUser = user;
+        return AuthRestoreResult.restored;
+      }
       await _expireSession(notify: true);
-      return false;
+      return AuthRestoreResult.expired;
+    } on ApiException catch (error) {
+      if (_isAuthenticationFailure(error.statusCode)) {
+        await _expireSession(notify: true);
+        return AuthRestoreResult.expired;
+      }
+      return AuthRestoreResult.temporaryFailure;
     } catch (_) {
-      await _expireSession(notify: true);
-      return false;
+      return AuthRestoreResult.temporaryFailure;
     }
   }
 
@@ -262,6 +285,24 @@ class AuthSession {
     await _storage.delete(key: _temporarySessionMarkerKey);
   }
 
+  Future<Map<String, dynamic>> _fetchCurrentUserForRestore() async {
+    final response = await _authorizedGet('auth/me/');
+    final data = _decode(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        _message(
+          data,
+          '\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062d\u0633\u0627\u0628.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+    if (data is Map<String, dynamic>) return data;
+    throw const ApiException(
+      '\u062a\u0639\u0630\u0631 \u0642\u0631\u0627\u0621\u0629 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062d\u0633\u0627\u0628.',
+    );
+  }
+
   Future<http.Response> _authorizedGet(String path) {
     return _client.get(
       uri(path),
@@ -340,12 +381,6 @@ class AuthSession {
     }
   }
 
-  Future<DateTime?> _readPersistedExpiry() async {
-    final value = await _storage.read(key: _expiresAtKey);
-    if (value == null || value.isEmpty) return null;
-    return DateTime.tryParse(value)?.toUtc();
-  }
-
   bool _isBeforeExpiry(DateTime expiresAt) {
     return DateTime.now().toUtc().isBefore(expiresAt);
   }
@@ -353,6 +388,16 @@ class AuthSession {
   bool _isSessionExpired() {
     final expiresAt = _sessionExpiresAt;
     return expiresAt == null || !_isBeforeExpiry(expiresAt);
+  }
+
+  bool _isAuthenticationFailure(int? statusCode) {
+    return statusCode == 400 || statusCode == 401 || statusCode == 403;
+  }
+
+  Future<void> _clearRememberedStorage() async {
+    await _storage.delete(key: _refreshKey);
+    await _storage.delete(key: _rememberKey);
+    await _storage.delete(key: _expiresAtKey);
   }
 
   Future<void> _ensureSessionStillActive() async {

@@ -22,6 +22,8 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
   late final Animation<double> _titleOpacity;
   late final Animation<Offset> _titleSlide;
   late final Animation<double> _loadingOpacity;
+  bool _hasTemporaryRestoreFailure = false;
+  bool _isRestoring = false;
 
   @override
   void initState() {
@@ -74,14 +76,33 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
   }
 
   Future<void> _restoreSession() async {
+    if (mounted) {
+      setState(() {
+        _hasTemporaryRestoreFailure = false;
+        _isRestoring = true;
+      });
+    }
     final results = await Future.wait<dynamic>([
       Future<void>.delayed(const Duration(milliseconds: 1500)),
       AuthSession.instance.restore(),
     ]);
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(
-      results[1] == true ? AppRoutes.dashboard : AppRoutes.login,
-    );
+    final restoreResult = results[1] as AuthRestoreResult;
+    setState(() {
+      _isRestoring = false;
+    });
+    if (restoreResult == AuthRestoreResult.restored) {
+      Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+      return;
+    }
+    if (restoreResult == AuthRestoreResult.noSession ||
+        restoreResult == AuthRestoreResult.expired) {
+      Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+      return;
+    }
+    setState(() {
+      _hasTemporaryRestoreFailure = true;
+    });
   }
 
   @override
@@ -163,16 +184,71 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                 const SizedBox(height: 28),
                 FadeTransition(
                   opacity: _loadingOpacity,
-                  child: _LoadingDots(
-                    animation: _activityController,
-                    color: AppColors.primary,
-                  ),
+                  child: _hasTemporaryRestoreFailure
+                      ? _RestoreFailureActions(
+                          isRestoring: _isRestoring,
+                          onRetry: _isRestoring ? null : _restoreSession,
+                        )
+                      : _LoadingDots(
+                          animation: _activityController,
+                          color: AppColors.primary,
+                        ),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _RestoreFailureActions extends StatelessWidget {
+  const _RestoreFailureActions({
+    required this.isRestoring,
+    required this.onRetry,
+  });
+
+  final bool isRestoring;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.72)
+        : AppColors.lightTextSecondary;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '\u062a\u0639\u0630\u0631 \u0627\u0644\u0627\u062a\u0635\u0627\u0644. \u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: textColor,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0,
+          ),
+        ),
+        const SizedBox(height: 14),
+        FilledButton(
+          onPressed: onRetry,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(128, 44),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          child: Text(
+            isRestoring
+                ? '\u062c\u0627\u0631\u064a \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629'
+                : '\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629',
+          ),
+        ),
+      ],
     );
   }
 }
