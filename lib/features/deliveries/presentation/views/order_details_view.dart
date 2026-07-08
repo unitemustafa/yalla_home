@@ -283,6 +283,14 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
                             label: const Text('تواصل'),
                           ),
                         ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: null,
+                            icon: const Icon(AppIcons.routing, size: 18),
+                            label: const Text('الخريطة'),
+                          ),
+                        ),
                       ],
                     ),
                   if (order.canMarkPickedUp || order.canMarkDelivered) ...[

@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/app_action_button.dart';
-import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 
 class DeliveryConfirmationResult {
-  const DeliveryConfirmationResult({required this.note});
+  const DeliveryConfirmationResult({this.note});
 
-  final String note;
+  final String? note;
 }
 
 class DeliveryConfirmationSheet extends StatefulWidget {
@@ -31,15 +30,10 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
 
   Future<void> _confirm() async {
     final note = _noteController.text.trim();
-    if (note.isEmpty) {
-      CustomSnackBar.showError(
-        context: context,
-        title: 'أضف ملاحظة التسليم قبل التأكيد.',
-      );
-      return;
-    }
-
-    Navigator.pop(context, DeliveryConfirmationResult(note: note));
+    Navigator.pop(
+      context,
+      DeliveryConfirmationResult(note: note.isEmpty ? null : note),
+    );
   }
 
   @override
@@ -104,7 +98,7 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
                   minLines: 3,
                   maxLines: 5,
                   decoration: const InputDecoration(
-                    labelText: 'ملاحظة التسليم',
+                    labelText: 'ملاحظة التسليم (اختياري)',
                     alignLabelWithHint: true,
                   ),
                 ),

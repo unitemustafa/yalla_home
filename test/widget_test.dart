@@ -126,7 +126,7 @@ void main() {
   });
 
   testWidgets(
-    'delivery confirmation requires a note and has no proof controls',
+    'delivery confirmation accepts optional notes and has no proof controls',
     (WidgetTester tester) async {
       DeliveryConfirmationResult? result;
 
@@ -146,10 +146,14 @@ void main() {
       expect(find.text('لا توجد صورة مرفوعة'), findsNothing);
 
       await tester.tap(find.text('تأكيد'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      expect(result, isNull);
-      expect(find.text('أضف ملاحظة التسليم قبل التأكيد.'), findsOneWidget);
+      expect(result, isNotNull);
+      expect(result?.note, isNull);
+
+      result = null;
+      await tester.tap(find.text('فتح تأكيد التسليم'));
+      await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField), 'تم التسليم للعميل');
       await tester.tap(find.text('تأكيد'));
@@ -166,23 +170,32 @@ void main() {
 
     expect(source, contains('patchJson'));
     expect(source, contains("'status': 'delivered'"));
-    expect(source, contains("'delivery_note': note.trim()"));
+    expect(source, contains("'delivery_note': deliveryNote"));
+    expect(
+      source,
+      contains('if (deliveryNote != null && deliveryNote.isNotEmpty)'),
+    );
     expect(source, isNot(contains('DeliveryProof')));
     expect(source, isNot(contains('patchMultipart')));
     expect(source, isNot(contains('deliveryProof')));
   });
 
-  test('order details exposes contact action without map navigation', () {
-    final source = File(
-      'lib/features/deliveries/presentation/views/order_details_view.dart',
-    ).readAsStringSync();
+  test(
+    'order details exposes enabled contact and disabled map action only',
+    () {
+      final source = File(
+        'lib/features/deliveries/presentation/views/order_details_view.dart',
+      ).readAsStringSync();
 
-    expect(source, contains("label: const Text('تواصل')"));
-    expect(source, isNot(contains("label: const Text('الخريطة')")));
-    expect(source, isNot(contains('_openMap')));
-    expect(source, isNot(contains('CourierTrackingMapView')));
-    expect(source, isNot(contains('courier_tracking_map_view.dart')));
-  });
+      expect(source, contains("label: const Text('تواصل')"));
+      expect(source, contains('onPressed: () => _showContactOptions(context)'));
+      expect(source, contains('onPressed: null'));
+      expect(source, contains("label: const Text('الخريطة')"));
+      expect(source, isNot(contains('_openMap')));
+      expect(source, isNot(contains('CourierTrackingMapView')));
+      expect(source, isNot(contains('courier_tracking_map_view.dart')));
+    },
+  );
 
   testWidgets('orders screen receives active orders without status filters', (
     WidgetTester tester,
