@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/auth/auth_session.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/routing/app_routes.dart';
+import '../../data/courier_notifications_api.dart';
 import '../../data/courier_orders_api.dart';
 import '../../domain/courier_order.dart';
+import '../controllers/courier_notifications_controller.dart';
 import '../widgets/delivery_confirmation_sheet.dart';
 import 'courier_notifications_view.dart';
 import 'courier_orders_view.dart';
@@ -23,6 +27,7 @@ class CourierShellView extends StatefulWidget {
 
 class _CourierShellViewState extends State<CourierShellView> {
   final _api = const CourierOrdersApi();
+  final _notificationsApi = const CourierNotificationsApi();
   final _notificationsController = CourierNotificationsController();
   List<CourierOrder> _orders = [];
   bool _loading = true;
@@ -34,10 +39,12 @@ class _CourierShellViewState extends State<CourierShellView> {
   void initState() {
     super.initState();
     _loadOrders();
+    unawaited(_refreshUnreadNotificationCount());
   }
 
   @override
   void dispose() {
+    _notificationsController.clear();
     _notificationsController.dispose();
     super.dispose();
   }
@@ -62,9 +69,9 @@ class _CourierShellViewState extends State<CourierShellView> {
       if (!mounted) return;
       setState(() {
         _orders = orders;
-        _unreadNotificationCount = _notificationsController.unreadCount(orders);
         _loading = false;
       });
+      unawaited(_refreshUnreadNotificationCount());
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -78,6 +85,7 @@ class _CourierShellViewState extends State<CourierShellView> {
     final pickedUp = await _api.markPickedUp(orderId);
     if (!mounted) return pickedUp;
     setState(() => _replaceOrder(pickedUp));
+    unawaited(_refreshUnreadNotificationCount());
     return pickedUp;
   }
 
@@ -91,6 +99,7 @@ class _CourierShellViewState extends State<CourierShellView> {
       _replaceOrder(delivered);
       _selectedIndex = 1;
     });
+    unawaited(_refreshUnreadNotificationCount());
     return delivered;
   }
 
@@ -99,10 +108,10 @@ class _CourierShellViewState extends State<CourierShellView> {
       for (final order in _orders)
         if (order.id == updated.id) updated else order,
     ];
-    _unreadNotificationCount = _notificationsController.unreadCount(_orders);
   }
 
   Future<void> _logout() async {
+    _notificationsController.clear();
     await AuthSession.instance.logout();
     if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(
@@ -196,7 +205,6 @@ class _CourierShellViewState extends State<CourierShellView> {
         builder: (_) => Scaffold(
           body: SafeArea(
             child: CourierNotificationsView(
-              orders: _orders,
               controller: _notificationsController,
               onOrderTap: _openOrderDetails,
               onUnreadCountChanged: _updateUnreadNotificationCount,
@@ -206,14 +214,22 @@ class _CourierShellViewState extends State<CourierShellView> {
       ),
     );
     if (!mounted) return;
-    _updateUnreadNotificationCount(
-      _notificationsController.unreadCount(_orders),
-    );
+    await _refreshUnreadNotificationCount();
   }
 
   void _updateUnreadNotificationCount(int count) {
     if (_unreadNotificationCount == count) return;
     setState(() => _unreadNotificationCount = count);
+  }
+
+  Future<void> _refreshUnreadNotificationCount() async {
+    try {
+      final count = await _notificationsApi.loadUnreadCount();
+      if (!mounted) return;
+      _updateUnreadNotificationCount(count);
+    } catch (_) {
+      // Notification badge failures should not block the orders experience.
+    }
   }
 }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:yalla_home/core/theme/app_theme_controller.dart';
+import 'package:yalla_home/features/deliveries/data/courier_notifications_api.dart';
+import 'package:yalla_home/features/deliveries/data/courier_orders_api.dart';
+import 'package:yalla_home/features/deliveries/domain/courier_notification.dart';
 import 'package:yalla_home/features/deliveries/domain/courier_order.dart';
+import 'package:yalla_home/features/deliveries/presentation/controllers/courier_notifications_controller.dart';
 import 'package:yalla_home/features/deliveries/presentation/views/courier_notifications_view.dart';
 import 'package:yalla_home/features/deliveries/presentation/views/courier_orders_view.dart';
 import 'package:yalla_home/features/deliveries/presentation/views/courier_profile_view.dart';
@@ -358,6 +363,331 @@ void main() {
     expect(find.text('0'), findsNothing);
   });
 
+  test('parses real notification responses safely', () {
+    final raw = {
+      'id': 91,
+      'audience': 'courier',
+      'type': 'order_assigned',
+      'title': 'New order assigned',
+      'message': 'A new order #123 has been assigned to you.',
+      'order_id': 123,
+      'is_read': false,
+      'is_blocking': false,
+      'is_resolved': false,
+      'read_at': null,
+      'resolved_at': null,
+      'created_at': '2026-07-08T09:15:00Z',
+    };
+
+    final notification = CourierNotification.fromJson(raw);
+
+    expect(notification.id, '91');
+    expect(notification.orderId, '123');
+    expect(notification.hasLinkedOrder, isTrue);
+    expect(notification.isRead, isFalse);
+    expect(notification.displayTitle, 'تم إسناد طلب جديد');
+    expect(notification.displayMessage, 'تم إسناد الطلب #123 إليك.');
+    expect(
+      notification.createdAt,
+      DateTime.parse('2026-07-08T09:15:00Z').toLocal(),
+    );
+  });
+
+  test('parses raw-list and paginated notification responses', () {
+    final raw = [
+      _notificationJson(id: 1, orderId: 101),
+      _notificationJson(id: 2, orderId: null, isRead: true),
+    ];
+    final paginated = {'count': 2, 'results': raw};
+
+    expect(
+      CourierNotificationsApi.parseNotificationsResponse(raw),
+      hasLength(2),
+    );
+    expect(
+      CourierNotificationsApi.parseNotificationsResponse(
+        paginated,
+      ).map((notification) => notification.id),
+      ['1', '2'],
+    );
+  });
+
+  test('parses backend unread count response', () {
+    expect(
+      CourierNotificationsApi.parseUnreadCountResponse({'unread_count': 7}),
+      7,
+    );
+    expect(CourierNotificationsApi.parseUnreadCountResponse('4'), 4);
+  });
+
+  test(
+    'controller updates unread badge only after mark-read success',
+    () async {
+      final api = _FakeNotificationsApi(
+        notifications: [_notification(id: '1', orderId: '123')],
+        unreadCount: 1,
+      );
+      final controller = CourierNotificationsController(api: api);
+      await controller.loadNotifications();
+
+      expect(controller.unreadCount, 1);
+      await controller.markRead(controller.notifications.single);
+
+      expect(api.markReadCalls, ['1']);
+      expect(controller.notifications.single.isRead, isTrue);
+      expect(controller.unreadCount, 0);
+    },
+  );
+
+  test('mark-all-read failure preserves unread state', () async {
+    final api = _FakeNotificationsApi(
+      notifications: [_notification(id: '1', orderId: '123')],
+      unreadCount: 1,
+    )..markAllError = Exception('backend failed');
+    final controller = CourierNotificationsController(api: api);
+    await controller.loadNotifications();
+
+    expect(controller.markAllRead(), throwsException);
+    expect(controller.notifications.single.isRead, isFalse);
+    expect(controller.unreadCount, 1);
+  });
+
+  test(
+    'controller clear prevents cross-courier notification leakage',
+    () async {
+      final controller = CourierNotificationsController(
+        api: _FakeNotificationsApi(
+          notifications: [_notification(id: '1', orderId: '123')],
+          unreadCount: 1,
+        ),
+      );
+      await controller.loadNotifications();
+
+      controller.clear();
+
+      expect(controller.notifications, isEmpty);
+      expect(controller.unreadCount, 0);
+      expect(controller.errorMessage, isNull);
+    },
+  );
+
+  testWidgets('notifications view shows loading, error, and retry', (
+    WidgetTester tester,
+  ) async {
+    final failedLoad = Completer<List<CourierNotification>>();
+    final successfulLoad = Completer<List<CourierNotification>>();
+    final api = _FakeNotificationsApi(
+      notifications: [_notification(id: '1', orderId: '123')],
+      unreadCount: 1,
+    )..loadCompleter = failedLoad;
+    final controller = CourierNotificationsController(api: api);
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierNotificationsView(
+          controller: controller,
+          ordersApi: _FakeOrdersApi(),
+          onOrderTap: (_) {},
+          onUnreadCountChanged: (_) {},
+        ),
+      ),
+    );
+
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    failedLoad.completeError(Exception('network failed'));
+    await tester.pump();
+    expect(find.text('تعذر تحميل الإشعارات'), findsOneWidget);
+
+    api.loadCompleter = successfulLoad;
+    await tester.tap(find.byKey(const Key('courier_notifications_retry')));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    successfulLoad.complete(api.notifications);
+    await tester.pump();
+
+    expect(find.text('تم إسناد طلب جديد'), findsOneWidget);
+  });
+
+  testWidgets('unread cards mark read before opening details', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeNotificationsApi(
+      notifications: [_notification(id: '1', orderId: '123')],
+      unreadCount: 1,
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierNotificationsView(
+          controller: CourierNotificationsController(api: api),
+          ordersApi: _FakeOrdersApi(),
+          onOrderTap: (_) {},
+          onUnreadCountChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('تم إسناد طلب جديد'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('courier_notification_1')));
+    await tester.pumpAndSettle();
+
+    expect(api.markReadCalls, ['1']);
+    expect(find.text('تفاصيل الإشعار'), findsOneWidget);
+  });
+
+  testWidgets('mark-all-read updates loaded records and badge after success', (
+    WidgetTester tester,
+  ) async {
+    var unread = -1;
+    final api = _FakeNotificationsApi(
+      notifications: [_notification(id: '1', orderId: '123')],
+      unreadCount: 1,
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierNotificationsView(
+          controller: CourierNotificationsController(api: api),
+          ordersApi: _FakeOrdersApi(),
+          onOrderTap: (_) {},
+          onUnreadCountChanged: (count) => unread = count,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('courier_notifications_mark_all')));
+    await tester.pump();
+
+    expect(api.markAllCalls, 1);
+    expect(unread, 0);
+    expect(find.text('كل الإشعارات مقروءة'), findsOneWidget);
+  });
+
+  testWidgets('failed delete keeps the notification card visible', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeNotificationsApi(
+      notifications: [_notification(id: '1', orderId: '123')],
+      unreadCount: 1,
+    )..deleteError = Exception('delete failed');
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierNotificationsView(
+          controller: CourierNotificationsController(api: api),
+          ordersApi: _FakeOrdersApi(),
+          onOrderTap: (_) {},
+          onUnreadCountChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.drag(
+      find.byKey(const ValueKey('courier_notification_1')),
+      const Offset(500, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.deleteCalls, ['1']);
+    expect(find.text('تم إسناد طلب جديد'), findsOneWidget);
+  });
+
+  testWidgets('opening linked order loads the real courier order', (
+    WidgetTester tester,
+  ) async {
+    CourierOrder? opened;
+    final notificationsApi = _FakeNotificationsApi(
+      notifications: [_notification(id: '1', orderId: '123')],
+      unreadCount: 1,
+    );
+    final ordersApi = _FakeOrdersApi(
+      orders: {
+        '123': _order(
+          id: '123',
+          status: CourierOrderStatus.assigned,
+          expectedDeliveryAt: DateTime(2026, 7, 8, 10),
+        ),
+      },
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierNotificationsView(
+          controller: CourierNotificationsController(api: notificationsApi),
+          ordersApi: ordersApi,
+          onOrderTap: (order) => opened = order,
+          onUnreadCountChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('courier_notification_1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('فتح الطلب'));
+    await tester.pumpAndSettle();
+
+    expect(ordersApi.loadOrderCalls, ['123']);
+    expect(opened?.id, '123');
+  });
+
+  testWidgets('missing linked order shows an error and does not crash', (
+    WidgetTester tester,
+  ) async {
+    final notificationsApi = _FakeNotificationsApi(
+      notifications: [_notification(id: '1', orderId: '123')],
+      unreadCount: 1,
+    );
+    final ordersApi = _FakeOrdersApi()..loadError = Exception('404');
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierNotificationsView(
+          controller: CourierNotificationsController(api: notificationsApi),
+          ordersApi: ordersApi,
+          onOrderTap: (_) => fail('should not open unavailable order'),
+          onUnreadCountChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('courier_notification_1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('فتح الطلب'));
+    await tester.pumpAndSettle();
+
+    expect(ordersApi.loadOrderCalls, ['123']);
+    expect(find.text('هذا الطلب لم يعد متاحا لك.'), findsOneWidget);
+  });
+
+  test('no runtime code generates notifications from CourierOrder', () {
+    final source = File(
+      'lib/features/deliveries/presentation/views/courier_notifications_view.dart',
+    ).readAsStringSync();
+    final controllerSource = File(
+      'lib/features/deliveries/presentation/controllers/courier_notifications_controller.dart',
+    ).readAsStringSync();
+
+    expect(source, isNot(contains('fromOrder')));
+    expect(source, isNot(contains('assigned-')));
+    expect(source, isNot(contains('delivered-')));
+    expect(source, isNot(contains('expectedDeliveryAt')));
+    expect(controllerSource, isNot(contains('_readIds')));
+    expect(controllerSource, isNot(contains('_dismissedIds')));
+  });
+
   testWidgets('tapping header bell opens notifications and back returns', (
     WidgetTester tester,
   ) async {
@@ -415,17 +745,19 @@ void main() {
       await tester.pumpWidget(
         _TestApp(
           child: CourierNotificationsView(
-            orders: [
-              _order(
-                status: CourierOrderStatus.assigned,
-                expectedDeliveryAt: DateTime(2026, 6, 15, 12, 43),
+            controller: CourierNotificationsController(
+              api: _FakeNotificationsApi(
+                notifications: [_notification(id: '1', orderId: '123')],
+                unreadCount: 1,
               ),
-            ],
+            ),
+            ordersApi: _FakeOrdersApi(),
             onOrderTap: (_) {},
             onUnreadCountChanged: (count) => unreadCount = count,
           ),
         ),
       );
+      await tester.pump();
       await tester.pump();
 
       final backButton = find.byKey(
@@ -433,10 +765,13 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(backButton, findsOneWidget);
-      expect(find.byTooltip('تعليم الكل كمقروء'), findsOneWidget);
+      expect(
+        find.byKey(const Key('courier_notifications_mark_all')),
+        findsOneWidget,
+      );
       expect(unreadCount, 1);
 
-      await tester.tap(find.byTooltip('تعليم الكل كمقروء'));
+      await tester.tap(find.byKey(const Key('courier_notifications_mark_all')));
       await tester.pump();
 
       expect(unreadCount, 0);
@@ -554,7 +889,10 @@ class _OrdersNotificationsRouteHost extends StatelessWidget {
               builder: (_) => Directionality(
                 textDirection: TextDirection.rtl,
                 child: CourierNotificationsView(
-                  orders: const [],
+                  controller: CourierNotificationsController(
+                    api: _FakeNotificationsApi(),
+                  ),
+                  ordersApi: _FakeOrdersApi(),
                   onOrderTap: (_) {},
                   onUnreadCountChanged: (_) {},
                 ),
@@ -593,6 +931,144 @@ class _TestApp extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FakeNotificationsApi extends CourierNotificationsApi {
+  _FakeNotificationsApi({
+    List<CourierNotification>? notifications,
+    this.unreadCount = 0,
+  }) : notifications = notifications ?? const [];
+
+  List<CourierNotification> notifications;
+  int unreadCount;
+  Object? loadError;
+  Completer<List<CourierNotification>>? loadCompleter;
+  Object? markReadError;
+  Object? markAllError;
+  Object? deleteError;
+  int loadCalls = 0;
+  int markAllCalls = 0;
+  final List<String> markReadCalls = [];
+  final List<String> deleteCalls = [];
+
+  @override
+  Future<List<CourierNotification>> loadNotifications() async {
+    loadCalls += 1;
+    final completer = loadCompleter;
+    if (completer != null) {
+      loadCompleter = null;
+      return completer.future;
+    }
+    if (loadError != null) throw loadError!;
+    return notifications;
+  }
+
+  @override
+  Future<int> loadUnreadCount() async {
+    if (loadError != null) throw loadError!;
+    return unreadCount;
+  }
+
+  @override
+  Future<CourierNotification> markRead(
+    String notificationId, {
+    CourierNotification? current,
+  }) async {
+    markReadCalls.add(notificationId);
+    if (markReadError != null) throw markReadError!;
+    final updated =
+        (current ??
+                notifications.firstWhere(
+                  (notification) => notification.id == notificationId,
+                ))
+            .copyWith(isRead: true, readAt: DateTime.now());
+    notifications = [
+      for (final notification in notifications)
+        if (notification.id == notificationId) updated else notification,
+    ];
+    unreadCount = notifications
+        .where((notification) => !notification.isRead)
+        .length;
+    return updated;
+  }
+
+  @override
+  Future<int> markAllRead() async {
+    markAllCalls += 1;
+    if (markAllError != null) throw markAllError!;
+    final previousUnread = unreadCount;
+    notifications = [
+      for (final notification in notifications)
+        notification.copyWith(isRead: true, readAt: DateTime.now()),
+    ];
+    unreadCount = 0;
+    return previousUnread;
+  }
+
+  @override
+  Future<void> deleteNotification(String notificationId) async {
+    deleteCalls.add(notificationId);
+    if (deleteError != null) throw deleteError!;
+    final removed = notifications
+        .where((notification) => notification.id == notificationId)
+        .toList();
+    notifications = [
+      for (final notification in notifications)
+        if (notification.id != notificationId) notification,
+    ];
+    if (removed.any((notification) => !notification.isRead) &&
+        unreadCount > 0) {
+      unreadCount -= 1;
+    }
+  }
+}
+
+class _FakeOrdersApi extends CourierOrdersApi {
+  _FakeOrdersApi({Map<String, CourierOrder>? orders}) : orders = orders ?? {};
+
+  final Map<String, CourierOrder> orders;
+  final List<String> loadOrderCalls = [];
+  Object? loadError;
+
+  @override
+  Future<CourierOrder> loadOrder(String orderId) async {
+    loadOrderCalls.add(orderId);
+    if (loadError != null) throw loadError!;
+    final order = orders[orderId];
+    if (order == null) throw Exception('not found');
+    return order;
+  }
+}
+
+CourierNotification _notification({
+  required String id,
+  String? orderId,
+  bool isRead = false,
+}) {
+  return CourierNotification.fromJson(
+    _notificationJson(id: int.parse(id), orderId: orderId, isRead: isRead),
+  );
+}
+
+Map<String, dynamic> _notificationJson({
+  required int id,
+  Object? orderId = 123,
+  bool isRead = false,
+}) {
+  return {
+    'id': id,
+    'audience': 'courier',
+    'type': 'order_assigned',
+    'title': 'New order assigned',
+    'message': 'A new order has been assigned to you.',
+    'order_id': orderId,
+    'is_read': isRead,
+    'is_blocking': false,
+    'is_resolved': false,
+    'read_at': null,
+    'resolved_at': null,
+    'created_at': '2026-07-08T09:15:00Z',
+  };
 }
 
 CourierOrder _order({

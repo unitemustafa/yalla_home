@@ -1,68 +1,27 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/formatters/app_currency.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
 import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
+import '../../data/courier_orders_api.dart';
+import '../../domain/courier_notification.dart';
 import '../../domain/courier_order.dart';
-
-class CourierNotificationsController extends ChangeNotifier {
-  final Set<String> _readIds = <String>{};
-  final Set<String> _dismissedIds = <String>{};
-
-  int unreadCount(List<CourierOrder> orders) {
-    return _notifications(
-      orders,
-    ).where((notification) => notification.unread).length;
-  }
-
-  List<_CourierNotificationData> _notifications(List<CourierOrder> orders) {
-    final orderNotifications = orders
-        .where((order) => order.isActiveCourierOrder || order.isDelivered)
-        .map(_CourierNotificationData.fromOrder)
-        .where((notification) => !_dismissedIds.contains(notification.id))
-        .map(
-          (notification) => notification.copyWith(
-            unread: notification.unread && !_readIds.contains(notification.id),
-          ),
-        )
-        .toList();
-
-    orderNotifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return orderNotifications;
-  }
-
-  void _markAllRead(List<_CourierNotificationData> notifications) {
-    _readIds.addAll(notifications.map((notification) => notification.id));
-    notifyListeners();
-  }
-
-  void _dismiss(_CourierNotificationData notification) {
-    _dismissedIds.add(notification.id);
-    _readIds.add(notification.id);
-    notifyListeners();
-  }
-
-  void _markRead(_CourierNotificationData notification) {
-    _readIds.add(notification.id);
-    notifyListeners();
-  }
-}
+import '../controllers/courier_notifications_controller.dart';
 
 class CourierNotificationsView extends StatefulWidget {
   const CourierNotificationsView({
     super.key,
-    required this.orders,
     required this.onOrderTap,
     required this.onUnreadCountChanged,
     this.controller,
+    this.ordersApi = const CourierOrdersApi(),
   });
 
-  final List<CourierOrder> orders;
   final ValueChanged<CourierOrder> onOrderTap;
   final ValueChanged<int> onUnreadCountChanged;
   final CourierNotificationsController? controller;
+  final CourierOrdersApi ordersApi;
 
   @override
   State<CourierNotificationsView> createState() =>
@@ -72,53 +31,82 @@ class CourierNotificationsView extends StatefulWidget {
 class _CourierNotificationsViewState extends State<CourierNotificationsView> {
   late final CourierNotificationsController _controller =
       widget.controller ?? CourierNotificationsController();
+  late final bool _ownsController = widget.controller == null;
+  bool _openingOrder = false;
 
   @override
   void initState() {
     super.initState();
+    _controller.addListener(_handleControllerChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _notifyUnreadCountChanged();
+      if (mounted) _controller.loadNotificationsIfNeeded();
     });
   }
 
   @override
-  void didUpdateWidget(covariant CourierNotificationsView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.orders != widget.orders) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _notifyUnreadCountChanged();
-      });
+  void dispose() {
+    _controller.removeListener(_handleControllerChanged);
+    if (_ownsController) _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleControllerChanged() {
+    if (!mounted) return;
+    widget.onUnreadCountChanged(_controller.unreadCount);
+    setState(() {});
+  }
+
+  Future<void> _markAllRead() async {
+    try {
+      await _controller.markAllRead();
+      if (!mounted) return;
+      CustomSnackBar.showSuccess(
+        context: context,
+        title: 'تم تعليم الإشعارات كمقروءة',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      CustomSnackBar.showError(context: context, title: error.toString());
     }
   }
 
-  List<_CourierNotificationData> get _notifications {
-    return _controller._notifications(widget.orders);
+  Future<bool> _confirmDelete(CourierNotification notification) async {
+    try {
+      await _controller.deleteNotification(notification);
+      if (!mounted) return true;
+      CustomSnackBar.showSuccess(context: context, title: 'تم حذف الإشعار');
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      CustomSnackBar.showError(context: context, title: error.toString());
+      return false;
+    }
   }
 
-  int get _unreadCount {
-    return _notifications.where((notification) => notification.unread).length;
+  Future<CourierNotification> _markReadIfNeeded(
+    CourierNotification notification,
+  ) async {
+    if (notification.isRead) return notification;
+    try {
+      return await _controller.markRead(notification);
+    } catch (error) {
+      if (mounted) {
+        CustomSnackBar.showError(context: context, title: error.toString());
+      }
+      rethrow;
+    }
   }
 
-  void _markAllRead() {
-    setState(() => _controller._markAllRead(_notifications));
-    _notifyUnreadCountChanged();
-
-    CustomSnackBar.showSuccess(
-      context: context,
-      title: 'تم تعليم الإشعارات كمقروءة',
-    );
-  }
-
-  void _deleteNotification(_CourierNotificationData notification) {
-    setState(() => _controller._dismiss(notification));
-    _notifyUnreadCountChanged();
-
-    CustomSnackBar.showError(context: context, title: 'تم حذف الإشعار');
-  }
-
-  void _openNotification(_CourierNotificationData notification) {
-    setState(() => _controller._markRead(notification));
-    _notifyUnreadCountChanged();
+  Future<void> _openNotification(CourierNotification notification) async {
+    CourierNotification visibleNotification = notification;
+    if (!notification.isRead) {
+      try {
+        visibleNotification = await _markReadIfNeeded(notification);
+      } catch (_) {
+        return;
+      }
+    }
+    if (!mounted) return;
 
     showModalBottomSheet<void>(
       context: context,
@@ -126,19 +114,47 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return _NotificationDetailSheet(
-          data: notification.copyWith(unread: false),
-          onOrderTap: () {
+          data: visibleNotification,
+          openingOrder: _openingOrder,
+          onOrderTap: () async {
             Navigator.pop(sheetContext);
-            widget.onOrderTap(notification.order);
+            await _openLinkedOrder(visibleNotification);
           },
         );
       },
     );
   }
 
-  void _notifyUnreadCountChanged() {
-    widget.onUnreadCountChanged(_unreadCount);
+  Future<void> _openLinkedOrder(CourierNotification notification) async {
+    final orderId = notification.orderId;
+    if (orderId == null || orderId.isEmpty) {
+      CustomSnackBar.showError(
+        context: context,
+        title: 'هذا الطلب لم يعد متاحا لك.',
+      );
+      return;
+    }
+
+    if (_openingOrder) return;
+    setState(() => _openingOrder = true);
+    try {
+      final readNotification = await _markReadIfNeeded(notification);
+      final id = readNotification.orderId ?? orderId;
+      final order = await widget.ordersApi.loadOrder(id);
+      if (!mounted) return;
+      widget.onOrderTap(order);
+    } catch (_) {
+      if (!mounted) return;
+      CustomSnackBar.showError(
+        context: context,
+        title: 'هذا الطلب لم يعد متاحا لك.',
+      );
+    } finally {
+      if (mounted) setState(() => _openingOrder = false);
+    }
   }
+
+  Future<void> _refresh() => _controller.refreshNotifications();
 
   @override
   Widget build(BuildContext context) {
@@ -146,7 +162,11 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
     final backgroundColor = isDark
         ? AppColors.darkBackground
         : const Color(0xFFF7F8FB);
-    final notifications = _notifications;
+    final notifications = _controller.notifications;
+    final isInitialLoading =
+        _controller.isLoading &&
+        notifications.isEmpty &&
+        _controller.errorMessage == null;
 
     return ColoredBox(
       color: backgroundColor,
@@ -156,71 +176,93 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
               ? 680.0
               : constraints.maxWidth;
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-            children: [
-              Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxContentWidth),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      PageTopBar(
-                        title: 'الإشعارات',
-                        subtitle: 'تنبيهات الطلبات وحالة التسليم',
-                        showBackButton: true,
-                        backButtonKey: const Key(
-                          'courier_notifications_back_button',
-                        ),
-                        onBackPressed: () => Navigator.maybePop(context),
-                        actions: [
-                          _NotificationActionButton(
-                            isDark: isDark,
-                            icon: AppIcons.tick_circle,
-                            tooltip: 'تعليم الكل كمقروء',
-                            onPressed: _unreadCount == 0 ? null : _markAllRead,
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+              children: [
+                Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxContentWidth),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        PageTopBar(
+                          title: 'الإشعارات',
+                          subtitle: 'تنبيهات الطلبات وحالة التسليم',
+                          showBackButton: true,
+                          backButtonKey: const Key(
+                            'courier_notifications_back_button',
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      _NotificationSummary(
-                        isDark: isDark,
-                        unreadCount: _unreadCount,
-                        totalCount: notifications.length,
-                      ),
-                      const SizedBox(height: 22),
-                      if (notifications.isEmpty)
-                        const _EmptyNotificationsView()
-                      else ...[
-                        Text(
-                          'اليوم',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w900),
+                          onBackPressed: () => Navigator.maybePop(context),
+                          actions: [
+                            _NotificationActionButton(
+                              key: const Key('courier_notifications_mark_all'),
+                              isDark: isDark,
+                              icon: AppIcons.tick_circle,
+                              tooltip: 'تعليم الكل كمقروء',
+                              onPressed:
+                                  _controller.unreadCount == 0 ||
+                                      _controller.isMarkingAllRead
+                                  ? null
+                                  : _markAllRead,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 10),
-                        for (final notification in notifications)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Dismissible(
-                              key: ValueKey(notification.id),
-                              direction: DismissDirection.endToStart,
-                              background:
-                                  const _NotificationDismissBackground(),
-                              onDismissed: (_) =>
-                                  _deleteNotification(notification),
-                              child: _NotificationCard(
-                                data: notification,
-                                isDark: isDark,
-                                onTap: () => _openNotification(notification),
+                        const SizedBox(height: 18),
+                        _NotificationSummary(
+                          isDark: isDark,
+                          unreadCount: _controller.unreadCount,
+                          totalCount: notifications.length,
+                        ),
+                        const SizedBox(height: 22),
+                        if (isInitialLoading)
+                          const _NotificationsLoadingView()
+                        else if (_controller.errorMessage != null &&
+                            notifications.isEmpty)
+                          _NotificationsErrorView(
+                            message: _controller.errorMessage!,
+                            onRetry: _controller.loadNotifications,
+                          )
+                        else if (notifications.isEmpty)
+                          const _EmptyNotificationsView()
+                        else ...[
+                          Text(
+                            'اليوم',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 10),
+                          for (final notification in notifications)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Dismissible(
+                                key: ValueKey(
+                                  'courier_notification_${notification.id}',
+                                ),
+                                direction: DismissDirection.endToStart,
+                                background:
+                                    const _NotificationDismissBackground(),
+                                confirmDismiss: (_) =>
+                                    _confirmDelete(notification),
+                                child: _NotificationCard(
+                                  data: notification,
+                                  isDark: isDark,
+                                  isDeleting: _controller.isDeleting(
+                                    notification,
+                                  ),
+                                  onTap: () => _openNotification(notification),
+                                ),
                               ),
                             ),
-                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
@@ -230,6 +272,7 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
 
 class _NotificationActionButton extends StatelessWidget {
   const _NotificationActionButton({
+    super.key,
     required this.isDark,
     required this.icon,
     required this.tooltip,
@@ -339,7 +382,7 @@ class _NotificationSummary extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'إجمالي $totalCount تنبيه للطلبات الحالية والمسلمة.',
+                  'إجمالي $totalCount إشعار من الخادم.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.78),
                     height: 1.35,
@@ -359,11 +402,13 @@ class _NotificationCard extends StatelessWidget {
   const _NotificationCard({
     required this.data,
     required this.isDark,
+    required this.isDeleting,
     required this.onTap,
   });
 
-  final _CourierNotificationData data;
+  final CourierNotification data;
   final bool isDark;
+  final bool isDeleting;
   final VoidCallback onTap;
 
   @override
@@ -372,17 +417,18 @@ class _NotificationCard extends StatelessWidget {
     final mutedColor = isDark
         ? AppColors.darkTextSecondary
         : AppColors.lightTextSecondary;
-    final borderColor = data.unread
+    final borderColor = !data.isRead
         ? AppColors.primary.withValues(alpha: 0.20)
         : (isDark
               ? Colors.white.withValues(alpha: 0.08)
               : Colors.black.withValues(alpha: 0.05));
+    final color = _notificationColor(data);
 
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        onTap: onTap,
+        onTap: isDeleting ? null : onTap,
         borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
@@ -399,10 +445,10 @@ class _NotificationCard extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: data.color.withValues(alpha: isDark ? 0.18 : 0.10),
+                  color: color.withValues(alpha: isDark ? 0.18 : 0.10),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(data.icon, color: data.color, size: 21),
+                child: Icon(_notificationIcon(data), color: color, size: 21),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -413,14 +459,14 @@ class _NotificationCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            data.title,
+                            data.displayTitle,
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(fontWeight: FontWeight.w900),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (data.unread)
+                        if (!data.isRead)
                           Container(
                             width: 8,
                             height: 8,
@@ -433,7 +479,7 @@ class _NotificationCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      data.message,
+                      data.displayMessage,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -444,7 +490,7 @@ class _NotificationCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      data.timeLabel,
+                      data.relativeTimeLabel(),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: mutedColor,
                         fontWeight: FontWeight.w700,
@@ -464,11 +510,13 @@ class _NotificationCard extends StatelessWidget {
 class _NotificationDetailSheet extends StatelessWidget {
   const _NotificationDetailSheet({
     required this.data,
+    required this.openingOrder,
     required this.onOrderTap,
   });
 
-  final _CourierNotificationData data;
-  final VoidCallback onOrderTap;
+  final CourierNotification data;
+  final bool openingOrder;
+  final Future<void> Function() onOrderTap;
 
   @override
   Widget build(BuildContext context) {
@@ -478,6 +526,7 @@ class _NotificationDetailSheet extends StatelessWidget {
         ? AppColors.darkTextSecondary
         : AppColors.lightTextSecondary;
     final textColor = isDark ? Colors.white : AppColors.lightTextPrimary;
+    final color = _notificationColor(data);
 
     return SafeArea(
       top: false,
@@ -521,10 +570,14 @@ class _NotificationDetailSheet extends StatelessWidget {
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
-                      color: data.color.withValues(alpha: isDark ? 0.18 : 0.10),
+                      color: color.withValues(alpha: isDark ? 0.18 : 0.10),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(data.icon, color: data.color, size: 25),
+                    child: Icon(
+                      _notificationIcon(data),
+                      color: color,
+                      size: 25,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -541,7 +594,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                         ),
                         const SizedBox(height: 5),
                         Text(
-                          data.title,
+                          data.displayTitle,
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(
                                 color: textColor,
@@ -551,7 +604,9 @@ class _NotificationDetailSheet extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '${data.order.id} • ${data.timeLabel}',
+                          data.hasLinkedOrder
+                              ? '#${data.orderId} • ${data.relativeTimeLabel()}'
+                              : data.relativeTimeLabel(),
                           textDirection: TextDirection.ltr,
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
@@ -566,40 +621,41 @@ class _NotificationDetailSheet extends StatelessWidget {
               ),
               const SizedBox(height: 18),
               Text(
-                data.message,
+                data.displayMessage,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: textColor,
                   height: 1.55,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 16),
-              _NotificationMetaRow(
-                icon: AppIcons.location,
-                label: 'المنطقة',
-                value: data.order.area,
-                color: data.color,
-              ),
-              const SizedBox(height: 8),
-              _NotificationMetaRow(
-                icon: AppIcons.money_3,
-                label: 'قيمة الطلب',
-                value: AppCurrency.format(data.order.total),
-                color: AppColors.success,
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: onOrderTap,
-                  icon: const Icon(AppIcons.receipt_text, size: 18),
-                  label: const Text(
-                    'فتح الطلب',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+              if (data.isBlocking || data.isResolved) ...[
+                const SizedBox(height: 16),
+                _NotificationMetaRow(
+                  icon: data.isResolved
+                      ? AppIcons.tick_circle
+                      : AppIcons.warning_2,
+                  label: 'الحالة',
+                  value: data.isResolved ? 'تم الحل' : 'يتطلب متابعة',
+                  color: data.isResolved
+                      ? AppColors.success
+                      : AppColors.warning,
+                ),
+              ],
+              if (data.hasLinkedOrder) ...[
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: openingOrder ? null : onOrderTap,
+                    icon: const Icon(AppIcons.receipt_text, size: 18),
+                    label: const Text(
+                      'فتح الطلب',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -679,6 +735,74 @@ class _NotificationDismissBackground extends StatelessWidget {
   }
 }
 
+class _NotificationsLoadingView extends StatelessWidget {
+  const _NotificationsLoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 42),
+      child: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _NotificationsErrorView extends StatelessWidget {
+  const _NotificationsErrorView({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final mutedColor = isDark
+        ? AppColors.darkTextSecondary
+        : AppColors.lightTextSecondary;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCardColor : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
+        ),
+      ),
+      child: Column(
+        children: [
+          const Icon(AppIcons.warning_2, size: 30, color: AppColors.error),
+          const SizedBox(height: 10),
+          Text(
+            'تعذر تحميل الإشعارات',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: mutedColor,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            key: const Key('courier_notifications_retry'),
+            onPressed: onRetry,
+            child: const Text('إعادة المحاولة'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptyNotificationsView extends StatelessWidget {
   const _EmptyNotificationsView();
 
@@ -706,14 +830,14 @@ class _EmptyNotificationsView extends StatelessWidget {
           Icon(AppIcons.notification_bing, size: 30, color: mutedColor),
           const SizedBox(height: 10),
           Text(
-            'مفيش إشعارات حاليا',
+            'لا توجد إشعارات حاليا',
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 4),
           Text(
-            'أي تنبيه جديد بخصوص الطلبات هيظهر هنا.',
+            'أي تنبيه جديد بخصوص الطلبات سيظهر هنا.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: mutedColor,
@@ -726,82 +850,19 @@ class _EmptyNotificationsView extends StatelessWidget {
   }
 }
 
-class _CourierNotificationData {
-  const _CourierNotificationData({
-    required this.id,
-    required this.order,
-    required this.icon,
-    required this.title,
-    required this.message,
-    required this.timeLabel,
-    required this.createdAt,
-    required this.color,
-    required this.unread,
-  });
+IconData _notificationIcon(CourierNotification notification) {
+  return switch (notification.type) {
+    'order_assigned' => AppIcons.box,
+    _ => AppIcons.notification_bing,
+  };
+}
 
-  factory _CourierNotificationData.fromOrder(CourierOrder order) {
-    if (order.isDelivered) {
-      final deliveredAt = order.deliveredAt ?? order.createdAt;
-      return _CourierNotificationData(
-        id: 'delivered-${order.id}',
-        order: order,
-        icon: AppIcons.tick_circle,
-        title: 'تم تسليم ${order.id}',
-        message:
-            'تم تسجيل تسليم طلب ${order.customerName} بقيمة ${AppCurrency.format(order.total)}.',
-        timeLabel: _relativeTime(deliveredAt),
-        createdAt: deliveredAt,
-        color: AppColors.success,
-        unread: false,
-      );
-    }
-
-    final isUrgent =
-        order.expectedDeliveryAt.difference(DateTime.now()).inMinutes <= 45;
-
-    return _CourierNotificationData(
-      id: 'assigned-${order.id}',
-      order: order,
-      icon: isUrgent ? AppIcons.warning_2 : AppIcons.box,
-      title: isUrgent ? 'طلب قريب التسليم' : 'طلب جديد مطلوب استلامه',
-      message:
-          '${order.id} في ${order.area} مع ${order.itemCount} منتجات بقيمة ${AppCurrency.format(order.total)}.',
-      timeLabel: _relativeTime(order.createdAt),
-      createdAt: order.createdAt,
-      color: isUrgent ? AppColors.warning : AppColors.info,
-      unread: true,
-    );
+Color _notificationColor(CourierNotification notification) {
+  if (notification.isBlocking && !notification.isResolved) {
+    return AppColors.warning;
   }
-
-  final String id;
-  final CourierOrder order;
-  final IconData icon;
-  final String title;
-  final String message;
-  final String timeLabel;
-  final DateTime createdAt;
-  final Color color;
-  final bool unread;
-
-  _CourierNotificationData copyWith({bool? unread}) {
-    return _CourierNotificationData(
-      id: id,
-      order: order,
-      icon: icon,
-      title: title,
-      message: message,
-      timeLabel: timeLabel,
-      createdAt: createdAt,
-      color: color,
-      unread: unread ?? this.unread,
-    );
-  }
-
-  static String _relativeTime(DateTime value) {
-    final difference = DateTime.now().difference(value);
-    if (difference.inMinutes < 1) return 'الآن';
-    if (difference.inMinutes < 60) return 'منذ ${difference.inMinutes} دقيقة';
-    if (difference.inHours < 24) return 'منذ ${difference.inHours} ساعة';
-    return 'منذ ${difference.inDays} يوم';
-  }
+  return switch (notification.type) {
+    'order_assigned' => AppColors.info,
+    _ => AppColors.primary,
+  };
 }

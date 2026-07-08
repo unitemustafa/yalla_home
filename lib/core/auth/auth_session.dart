@@ -205,6 +205,24 @@ class AuthSession {
     return data;
   }
 
+  Future<dynamic> postJson(String path, Map<String, dynamic> body) async {
+    final response = await _sendWithRefresh<http.Response>(
+      send: () => _authorizedPost(path, body),
+      statusCode: (response) => response.statusCode,
+    );
+    final data = _decode(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        _message(
+          data,
+          '\u062a\u0639\u0630\u0631 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+    return data;
+  }
+
   Future<dynamic> patchJson(String path, Map<String, dynamic> body) async {
     final response = await _sendWithRefresh<http.Response>(
       send: () => _authorizedPatch(path, body),
@@ -216,6 +234,24 @@ class AuthSession {
         _message(
           data,
           '\u062a\u0639\u0630\u0631 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0637\u0644\u0628.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+    return data;
+  }
+
+  Future<dynamic> deleteJson(String path) async {
+    final response = await _sendWithRefresh<http.Response>(
+      send: () => _authorizedDelete(path),
+      statusCode: (response) => response.statusCode,
+    );
+    final data = _decode(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        _message(
+          data,
+          '\u062a\u0639\u0630\u0631 \u062d\u0630\u0641 \u0627\u0644\u0639\u0646\u0635\u0631.',
         ),
         statusCode: response.statusCode,
       );
@@ -326,6 +362,20 @@ class AuthSession {
     );
   }
 
+  Future<http.Response> _authorizedPost(
+    String path,
+    Map<String, dynamic> body,
+  ) {
+    return _client.post(
+      uri(path),
+      headers: {
+        'Authorization': 'Bearer $_accessToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+  }
+
   Future<http.Response> _authorizedPatch(
     String path,
     Map<String, dynamic> body,
@@ -337,6 +387,13 @@ class AuthSession {
         'Content-Type': 'application/json',
       },
       body: jsonEncode(body),
+    );
+  }
+
+  Future<http.Response> _authorizedDelete(String path) {
+    return _client.delete(
+      uri(path),
+      headers: {'Authorization': 'Bearer $_accessToken'},
     );
   }
 
