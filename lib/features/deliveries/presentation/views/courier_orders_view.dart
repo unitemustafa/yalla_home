@@ -5,6 +5,7 @@ import '../../../../core/formatters/app_currency.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
 import '../../domain/courier_order.dart';
+import '../widgets/courier_notifications_button.dart';
 import '../widgets/order_card.dart';
 import 'order_details_view.dart';
 
@@ -15,12 +16,16 @@ class CourierOrdersView extends StatefulWidget {
     required this.onPickedUp,
     required this.onDelivered,
     required this.onRefresh,
+    required this.unreadNotificationCount,
+    required this.onNotificationsPressed,
   });
 
   final List<CourierOrder> orders;
   final OrderPickedUpHandler onPickedUp;
   final OrderDeliveredHandler onDelivered;
   final Future<void> Function() onRefresh;
+  final int unreadNotificationCount;
+  final VoidCallback onNotificationsPressed;
 
   @override
   State<CourierOrdersView> createState() => _CourierOrdersViewState();
@@ -40,9 +45,15 @@ class _CourierOrdersViewState extends State<CourierOrdersView> {
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           if (index == 0) {
-            return const PageTopBar(
+            return PageTopBar(
               title: 'طلبات التوصيل',
               subtitle: 'الطلبات المطلوب تسليمها اليوم',
+              actions: [
+                CourierNotificationsButton(
+                  unreadCount: widget.unreadNotificationCount,
+                  onPressed: widget.onNotificationsPressed,
+                ),
+              ],
             );
           }
 

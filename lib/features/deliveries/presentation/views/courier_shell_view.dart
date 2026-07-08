@@ -23,6 +23,7 @@ class CourierShellView extends StatefulWidget {
 
 class _CourierShellViewState extends State<CourierShellView> {
   final _api = const CourierOrdersApi();
+  final _notificationsController = CourierNotificationsController();
   List<CourierOrder> _orders = [];
   bool _loading = true;
   String? _loadError;
@@ -33,6 +34,12 @@ class _CourierShellViewState extends State<CourierShellView> {
   void initState() {
     super.initState();
     _loadOrders();
+  }
+
+  @override
+  void dispose() {
+    _notificationsController.dispose();
+    super.dispose();
   }
 
   List<CourierOrder> get _activeOrders {
@@ -55,6 +62,7 @@ class _CourierShellViewState extends State<CourierShellView> {
       if (!mounted) return;
       setState(() {
         _orders = orders;
+        _unreadNotificationCount = _notificationsController.unreadCount(orders);
         _loading = false;
       });
     } catch (error) {
@@ -91,6 +99,7 @@ class _CourierShellViewState extends State<CourierShellView> {
       for (final order in _orders)
         if (order.id == updated.id) updated else order,
     ];
+    _unreadNotificationCount = _notificationsController.unreadCount(_orders);
   }
 
   Future<void> _logout() async {
@@ -111,12 +120,13 @@ class _CourierShellViewState extends State<CourierShellView> {
         onPickedUp: _markPickedUp,
         onDelivered: _markDelivered,
         onRefresh: _loadOrders,
+        unreadNotificationCount: _unreadNotificationCount,
+        onNotificationsPressed: _openNotifications,
       ),
-      DeliveredHistoryView(orders: _deliveredOrders),
-      CourierNotificationsView(
-        orders: _orders,
-        onOrderTap: _openOrderDetails,
-        onUnreadCountChanged: _updateUnreadNotificationCount,
+      DeliveredHistoryView(
+        orders: _deliveredOrders,
+        unreadNotificationCount: _unreadNotificationCount,
+        onNotificationsPressed: _openNotifications,
       ),
       CourierProfileView(
         activeOrders: _activeOrders.length,
@@ -152,7 +162,6 @@ class _CourierShellViewState extends State<CourierShellView> {
       ),
       bottomNavigationBar: _CourierBottomNavigationBar(
         selectedIndex: _selectedIndex,
-        notificationBadgeCount: _unreadNotificationCount,
         onSelected: (index) => setState(() => _selectedIndex = index),
       ),
     );
@@ -180,6 +189,28 @@ class _CourierShellViewState extends State<CourierShellView> {
     );
   }
 
+  Future<void> _openNotifications() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          body: SafeArea(
+            child: CourierNotificationsView(
+              orders: _orders,
+              controller: _notificationsController,
+              onOrderTap: _openOrderDetails,
+              onUnreadCountChanged: _updateUnreadNotificationCount,
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    _updateUnreadNotificationCount(
+      _notificationsController.unreadCount(_orders),
+    );
+  }
+
   void _updateUnreadNotificationCount(int count) {
     if (_unreadNotificationCount == count) return;
     setState(() => _unreadNotificationCount = count);
@@ -189,12 +220,10 @@ class _CourierShellViewState extends State<CourierShellView> {
 class _CourierBottomNavigationBar extends StatelessWidget {
   const _CourierBottomNavigationBar({
     required this.selectedIndex,
-    required this.notificationBadgeCount,
     required this.onSelected,
   });
 
   final int selectedIndex;
-  final int notificationBadgeCount;
   final ValueChanged<int> onSelected;
 
   static const _items = [
@@ -222,16 +251,6 @@ class _CourierBottomNavigationBar extends StatelessWidget {
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.08)
         : Colors.black.withValues(alpha: 0.06);
-    final navigationItems = [
-      _items[0],
-      _items[1],
-      _NavigationItemData(
-        label: 'الإشعارات',
-        icon: AppIcons.notification,
-        activeIcon: AppIcons.notification_bing,
-      ),
-      _items[2],
-    ];
 
     return SafeArea(
       top: false,
@@ -250,12 +269,11 @@ class _CourierBottomNavigationBar extends StatelessWidget {
           ],
         ),
         child: Row(
-          children: List.generate(navigationItems.length, (index) {
+          children: List.generate(_items.length, (index) {
             return Expanded(
               child: _NavigationBarItem(
-                item: navigationItems[index],
+                item: _items[index],
                 isSelected: selectedIndex == index,
-                badgeCount: index == 2 ? notificationBadgeCount : 0,
                 onTap: () => onSelected(index),
               ),
             );
@@ -270,13 +288,11 @@ class _NavigationBarItem extends StatelessWidget {
   const _NavigationBarItem({
     required this.item,
     required this.isSelected,
-    required this.badgeCount,
     required this.onTap,
   });
 
   final _NavigationItemData item;
   final bool isSelected;
-  final int badgeCount;
   final VoidCallback onTap;
 
   @override
@@ -315,36 +331,6 @@ class _NavigationBarItem extends StatelessWidget {
                       size: 22,
                     ),
                   ),
-                  if (badgeCount > 0)
-                    PositionedDirectional(
-                      top: -4,
-                      end: 5,
-                      child: Container(
-                        constraints: const BoxConstraints(
-                          minWidth: 17,
-                          minHeight: 17,
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: AppColors.error,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: Theme.of(context).scaffoldBackgroundColor,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Text(
-                          badgeCount > 9 ? '9+' : '$badgeCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            height: 1,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
               const SizedBox(height: 5),

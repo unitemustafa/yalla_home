@@ -450,9 +450,12 @@ class _OrderHeader extends StatelessWidget {
   }
 
   String _formatTime(DateTime? value) {
-    if (value == null) return '--:--';
-    return '${value.hour.toString().padLeft(2, '0')}:'
-        '${value.minute.toString().padLeft(2, '0')}';
+    if (value == null) return '---';
+    final day = value.day.toString().padLeft(2, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '$day/$month $hour:$minute';
   }
 }
 
@@ -772,12 +775,12 @@ class _DeliveryProofCard extends StatelessWidget {
   }
 
   String _formatDateTime(DateTime? value) {
-    if (value == null) return '--';
+    if (value == null) return '---';
     final day = value.day.toString().padLeft(2, '0');
     final month = value.month.toString().padLeft(2, '0');
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
-    return '$day/$month - $hour:$minute';
+    return '$day/$month $hour:$minute';
   }
 }
 

@@ -186,6 +186,9 @@ class CourierOrder {
     final status = courierOrderStatusFromRaw(rawStatus);
     final createdAt = _parseDate(json['created_at']);
     final assignedAt = _parseDate(json['assigned_at'], fallback: createdAt);
+    final deliveredAt =
+        _parseOptionalDate(json['delivered_at']) ??
+        _deliveredAtFromHistory(json['history']);
     final items = itemsJson.map(_itemFromJson).toList();
     final label = _clean(address?['name']);
     final details = _clean(address?['details']);
@@ -262,9 +265,7 @@ class CourierOrder {
           ? OrderLocation(latitude: latitude, longitude: longitude)
           : null,
       customerNotes: _clean(json['description']),
-      deliveredAt: json['delivered_at'] == null
-          ? null
-          : _parseDate(json['delivered_at']),
+      deliveredAt: deliveredAt,
       deliveryNote: _clean(json['delivery_note']),
       deliveryProofUrl: AuthSession.instance.absoluteUrl(
         json['delivery_proof'],
@@ -362,6 +363,25 @@ class CourierOrder {
     return DateTime.tryParse(value?.toString() ?? '')?.toLocal() ??
         fallback ??
         DateTime.now();
+  }
+
+  static DateTime? _parseOptionalDate(Object? value) {
+    return DateTime.tryParse(value?.toString() ?? '')?.toLocal();
+  }
+
+  static DateTime? _deliveredAtFromHistory(Object? value) {
+    DateTime? latestDeliveredAt;
+    for (final event in _list(value)) {
+      final toStatus = event['to_status']?.toString().trim().toLowerCase();
+      if (toStatus != 'delivered') continue;
+
+      final createdAt = _parseOptionalDate(event['created_at']);
+      if (createdAt == null) continue;
+      if (latestDeliveredAt == null || createdAt.isAfter(latestDeliveredAt)) {
+        latestDeliveredAt = createdAt;
+      }
+    }
+    return latestDeliveredAt;
   }
 
   static double _number(Object? value) => _optionalNumber(value) ?? 0;

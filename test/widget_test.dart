@@ -6,8 +6,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:yalla_home/core/theme/app_theme_controller.dart';
 import 'package:yalla_home/features/deliveries/domain/courier_order.dart';
+import 'package:yalla_home/features/deliveries/presentation/views/courier_notifications_view.dart';
 import 'package:yalla_home/features/deliveries/presentation/views/courier_orders_view.dart';
 import 'package:yalla_home/features/deliveries/presentation/views/courier_profile_view.dart';
+import 'package:yalla_home/features/deliveries/presentation/views/delivered_history_view.dart';
+import 'package:yalla_home/features/deliveries/presentation/widgets/courier_notifications_button.dart';
 import 'package:yalla_home/features/deliveries/presentation/widgets/delivery_confirmation_sheet.dart';
 import 'package:yalla_home/features/deliveries/presentation/widgets/order_card.dart';
 import 'package:yalla_home/yalla_home_app.dart';
@@ -76,7 +79,75 @@ void main() {
     );
 
     expect(find.text('وقت التسليم'), findsOneWidget);
-    expect(find.text('12:43'), findsOneWidget);
+    expect(find.text('15/06 12:43'), findsOneWidget);
+  });
+
+  testWidgets('delivered card shows fallback when delivered time is absent', (
+    WidgetTester tester,
+  ) async {
+    final deliveredOrder = _order(
+      status: CourierOrderStatus.delivered,
+      expectedDeliveryAt: DateTime(2026, 6, 15, 12, 43),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: OrderCard(
+          order: deliveredOrder,
+          showDeliveredMeta: true,
+          onTap: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('---'), findsOneWidget);
+  });
+
+  test('parses delivered_at before delivered history events', () {
+    final order = CourierOrder.fromJson({
+      'id': 'YM-1',
+      'status': 'delivered',
+      'created_at': '2026-06-15T09:00:00Z',
+      'assigned_at': '2026-06-15T10:00:00Z',
+      'delivered_at': '2026-06-15T12:43:00Z',
+      'history': [
+        {'to_status': 'delivered', 'created_at': '2026-06-15T11:30:00Z'},
+      ],
+    });
+
+    expect(order.deliveredAt, DateTime.parse('2026-06-15T12:43:00Z').toLocal());
+  });
+
+  test('falls back to latest delivered history event only', () {
+    final order = CourierOrder.fromJson({
+      'id': 'YM-1',
+      'status': 'delivered',
+      'created_at': '2026-06-15T09:00:00Z',
+      'assigned_at': '2026-06-15T10:00:00Z',
+      'delivered_at': null,
+      'history': [
+        {'to_status': 'picked_up', 'created_at': '2026-06-15T10:30:00Z'},
+        {'to_status': 'delivered', 'created_at': '2026-06-15T11:30:00Z'},
+        {'to_status': 'delivered', 'created_at': '2026-06-15T12:43:00Z'},
+      ],
+    });
+
+    expect(order.deliveredAt, DateTime.parse('2026-06-15T12:43:00Z').toLocal());
+  });
+
+  test('keeps deliveredAt null without an authoritative delivered time', () {
+    final order = CourierOrder.fromJson({
+      'id': 'YM-1',
+      'status': 'delivered',
+      'created_at': '2026-06-15T09:00:00Z',
+      'assigned_at': '2026-06-15T10:00:00Z',
+      'updated_at': '2026-06-15T12:43:00Z',
+      'history': [
+        {'to_status': 'picked_up', 'created_at': '2026-06-15T10:30:00Z'},
+      ],
+    });
+
+    expect(order.deliveredAt, isNull);
   });
 
   test('parses authoritative courier statuses and safe legacy statuses', () {
@@ -230,13 +301,171 @@ void main() {
                 deliveredAt: now,
               ),
           onRefresh: () async {},
+          unreadNotificationCount: 2,
+          onNotificationsPressed: () {},
         ),
       ),
     );
 
+    expect(find.byTooltip('الإشعارات'), findsOneWidget);
     expect(find.byType(ChoiceChip), findsNothing);
     expect(find.text('مطلوب الاستلام'), findsWidgets);
     expect(find.text('تم الاستلام'), findsWidgets);
+  });
+
+  testWidgets('delivered header shows bell and requested subtitle', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        child: DeliveredHistoryView(
+          orders: [
+            _order(
+              status: CourierOrderStatus.delivered,
+              expectedDeliveryAt: DateTime(2026, 6, 15, 12, 43),
+              deliveredAt: DateTime(2026, 6, 15, 12, 43),
+            ),
+          ],
+          unreadNotificationCount: 3,
+          onNotificationsPressed: () {},
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('الإشعارات'), findsOneWidget);
+    expect(find.text('الطلبات المسلّمة'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+  });
+
+  testWidgets('notification badge shows count and hides at zero', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierNotificationsButton(unreadCount: 5, onPressed: () {}),
+      ),
+    );
+
+    expect(find.text('5'), findsOneWidget);
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierNotificationsButton(unreadCount: 0, onPressed: () {}),
+      ),
+    );
+
+    expect(find.text('5'), findsNothing);
+    expect(find.text('0'), findsNothing);
+  });
+
+  testWidgets('tapping header bell opens notifications and back returns', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        child: Directionality(
+          textDirection: TextDirection.rtl,
+          child: const _OrdersNotificationsRouteHost(),
+        ),
+      ),
+    );
+
+    expect(find.text('طلبات التوصيل'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('selected-bottom-orders')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byTooltip('الإشعارات'));
+    await tester.pumpAndSettle();
+
+    final backButton = find.byKey(
+      const Key('courier_notifications_back_button'),
+    );
+    expect(find.text('الإشعارات'), findsOneWidget);
+    expect(find.byType(CourierNotificationsView), findsOneWidget);
+    expect(backButton, findsOneWidget);
+    final backIcon = tester.widget<Icon>(
+      find.descendant(of: backButton, matching: find.byType(Icon)),
+    );
+    expect(backIcon.icon?.codePoint, 0xe936);
+    expect(backIcon.icon?.fontFamily, 'iconsax');
+    expect(backIcon.size, 21);
+
+    await tester.tap(backButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CourierNotificationsView), findsNothing);
+    expect(find.text('طلبات التوصيل'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('selected-bottom-orders')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'notifications header back button and mark-all survive narrow width',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var unreadCount = -1;
+
+      await tester.pumpWidget(
+        _TestApp(
+          child: CourierNotificationsView(
+            orders: [
+              _order(
+                status: CourierOrderStatus.assigned,
+                expectedDeliveryAt: DateTime(2026, 6, 15, 12, 43),
+              ),
+            ],
+            onOrderTap: (_) {},
+            onUnreadCountChanged: (count) => unreadCount = count,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final backButton = find.byKey(
+        const Key('courier_notifications_back_button'),
+      );
+      expect(tester.takeException(), isNull);
+      expect(backButton, findsOneWidget);
+      expect(find.byTooltip('تعليم الكل كمقروء'), findsOneWidget);
+      expect(unreadCount, 1);
+
+      await tester.tap(find.byTooltip('تعليم الكل كمقروء'));
+      await tester.pump();
+
+      expect(unreadCount, 0);
+    },
+  );
+
+  test('bottom navigation source has exactly Orders, Delivered, Account', () {
+    final source = File(
+      'lib/features/deliveries/presentation/views/courier_shell_view.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('List.generate(_items.length'));
+    expect(source, isNot(contains('notificationBadgeCount')));
+    expect(source, isNot(contains('notification_bing')));
+    expect(
+      RegExp(r'^\s+_NavigationItemData\(', multiLine: true).allMatches(source),
+      hasLength(3),
+    );
+  });
+
+  test('historical delivery proof display support remains intact', () {
+    final source = File(
+      'lib/features/deliveries/presentation/views/order_details_view.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('order.deliveryProof'));
+    expect(source, contains('order.deliveryProofUrl'));
+    expect(source, contains('Image.network'));
+    expect(source, contains('Image.memory'));
   });
 
   testWidgets('profile stats navigate and theme can change inside app', (
@@ -293,6 +522,58 @@ class DeliveryConfirmationSheetHost extends StatelessWidget {
           if (result != null) onResult(result);
         },
         child: const Text('فتح تأكيد التسليم'),
+      ),
+    );
+  }
+}
+
+class _OrdersNotificationsRouteHost extends StatelessWidget {
+  const _OrdersNotificationsRouteHost();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CourierOrdersView(
+        orders: const [],
+        onPickedUp: (orderId) async => _order(
+          id: orderId,
+          status: CourierOrderStatus.pickedUp,
+          expectedDeliveryAt: DateTime(2026, 6, 15, 12, 43),
+        ),
+        onDelivered: (orderId, result) async => _order(
+          id: orderId,
+          status: CourierOrderStatus.delivered,
+          expectedDeliveryAt: DateTime(2026, 6, 15, 12, 43),
+        ),
+        onRefresh: () async {},
+        unreadNotificationCount: 1,
+        onNotificationsPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => Directionality(
+                textDirection: TextDirection.rtl,
+                child: CourierNotificationsView(
+                  orders: const [],
+                  onOrderTap: (_) {},
+                  onUnreadCountChanged: (_) {},
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+      bottomNavigationBar: const SizedBox(
+        height: 48,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text('الطلبات', key: ValueKey('selected-bottom-orders')),
+            ),
+            Expanded(child: Text('المسلّمة')),
+            Expanded(child: Text('حسابي')),
+          ],
+        ),
       ),
     );
   }

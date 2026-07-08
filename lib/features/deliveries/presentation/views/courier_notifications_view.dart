@@ -7,17 +7,62 @@ import '../../../../core/presentation/widgets/page_top_bar.dart';
 import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 import '../../domain/courier_order.dart';
 
+class CourierNotificationsController extends ChangeNotifier {
+  final Set<String> _readIds = <String>{};
+  final Set<String> _dismissedIds = <String>{};
+
+  int unreadCount(List<CourierOrder> orders) {
+    return _notifications(
+      orders,
+    ).where((notification) => notification.unread).length;
+  }
+
+  List<_CourierNotificationData> _notifications(List<CourierOrder> orders) {
+    final orderNotifications = orders
+        .where((order) => order.isActiveCourierOrder || order.isDelivered)
+        .map(_CourierNotificationData.fromOrder)
+        .where((notification) => !_dismissedIds.contains(notification.id))
+        .map(
+          (notification) => notification.copyWith(
+            unread: notification.unread && !_readIds.contains(notification.id),
+          ),
+        )
+        .toList();
+
+    orderNotifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return orderNotifications;
+  }
+
+  void _markAllRead(List<_CourierNotificationData> notifications) {
+    _readIds.addAll(notifications.map((notification) => notification.id));
+    notifyListeners();
+  }
+
+  void _dismiss(_CourierNotificationData notification) {
+    _dismissedIds.add(notification.id);
+    _readIds.add(notification.id);
+    notifyListeners();
+  }
+
+  void _markRead(_CourierNotificationData notification) {
+    _readIds.add(notification.id);
+    notifyListeners();
+  }
+}
+
 class CourierNotificationsView extends StatefulWidget {
   const CourierNotificationsView({
     super.key,
     required this.orders,
     required this.onOrderTap,
     required this.onUnreadCountChanged,
+    this.controller,
   });
 
   final List<CourierOrder> orders;
   final ValueChanged<CourierOrder> onOrderTap;
   final ValueChanged<int> onUnreadCountChanged;
+  final CourierNotificationsController? controller;
 
   @override
   State<CourierNotificationsView> createState() =>
@@ -25,8 +70,8 @@ class CourierNotificationsView extends StatefulWidget {
 }
 
 class _CourierNotificationsViewState extends State<CourierNotificationsView> {
-  final Set<String> _readIds = <String>{};
-  final Set<String> _dismissedIds = <String>{};
+  late final CourierNotificationsController _controller =
+      widget.controller ?? CourierNotificationsController();
 
   @override
   void initState() {
@@ -47,19 +92,7 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
   }
 
   List<_CourierNotificationData> get _notifications {
-    final orderNotifications = widget.orders
-        .where((order) => order.isActiveCourierOrder || order.isDelivered)
-        .map(_CourierNotificationData.fromOrder)
-        .where((notification) => !_dismissedIds.contains(notification.id))
-        .map(
-          (notification) => notification.copyWith(
-            unread: notification.unread && !_readIds.contains(notification.id),
-          ),
-        )
-        .toList();
-
-    orderNotifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return orderNotifications;
+    return _controller._notifications(widget.orders);
   }
 
   int get _unreadCount {
@@ -67,9 +100,7 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
   }
 
   void _markAllRead() {
-    setState(() {
-      _readIds.addAll(_notifications.map((notification) => notification.id));
-    });
+    setState(() => _controller._markAllRead(_notifications));
     _notifyUnreadCountChanged();
 
     CustomSnackBar.showSuccess(
@@ -79,17 +110,14 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
   }
 
   void _deleteNotification(_CourierNotificationData notification) {
-    setState(() {
-      _dismissedIds.add(notification.id);
-      _readIds.add(notification.id);
-    });
+    setState(() => _controller._dismiss(notification));
     _notifyUnreadCountChanged();
 
     CustomSnackBar.showError(context: context, title: 'تم حذف الإشعار');
   }
 
   void _openNotification(_CourierNotificationData notification) {
-    setState(() => _readIds.add(notification.id));
+    setState(() => _controller._markRead(notification));
     _notifyUnreadCountChanged();
 
     showModalBottomSheet<void>(
@@ -140,6 +168,11 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
                       PageTopBar(
                         title: 'الإشعارات',
                         subtitle: 'تنبيهات الطلبات وحالة التسليم',
+                        showBackButton: true,
+                        backButtonKey: const Key(
+                          'courier_notifications_back_button',
+                        ),
+                        onBackPressed: () => Navigator.maybePop(context),
                         actions: [
                           _NotificationActionButton(
                             isDark: isDark,

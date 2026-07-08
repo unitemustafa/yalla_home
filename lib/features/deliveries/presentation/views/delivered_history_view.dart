@@ -4,13 +4,21 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
 import '../../domain/courier_order.dart';
+import '../widgets/courier_notifications_button.dart';
 import '../widgets/order_card.dart';
 import 'order_details_view.dart';
 
 class DeliveredHistoryView extends StatelessWidget {
-  const DeliveredHistoryView({super.key, required this.orders});
+  const DeliveredHistoryView({
+    super.key,
+    required this.orders,
+    required this.unreadNotificationCount,
+    required this.onNotificationsPressed,
+  });
 
   final List<CourierOrder> orders;
+  final int unreadNotificationCount;
+  final VoidCallback onNotificationsPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -20,9 +28,15 @@ class DeliveredHistoryView extends StatelessWidget {
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         if (index == 0) {
-          return const PageTopBar(
+          return PageTopBar(
             title: 'المسلّمة',
-            subtitle: 'سجل الطلبات المسلّمة وصور الإثبات',
+            subtitle: 'الطلبات المسلّمة',
+            actions: [
+              CourierNotificationsButton(
+                unreadCount: unreadNotificationCount,
+                onPressed: onNotificationsPressed,
+              ),
+            ],
           );
         }
 
