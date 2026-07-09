@@ -26,11 +26,21 @@ class AuthSession {
 
   static String get apiBaseUrl {
     final configured = _configuredApiBaseUrl.trim();
+
+    if (configured.isEmpty && kReleaseMode) {
+      throw StateError(
+        'API_BASE_URL is required for release builds. '
+        'Provide it using --dart-define=API_BASE_URL=<url> or '
+        '--dart-define-from-file=env/production.json.',
+      );
+    }
+
     final baseUrl = configured.isNotEmpty
         ? configured
         : kIsWeb
         ? 'http://127.0.0.1:8000/api/v1'
         : 'http://10.0.2.2:8000/api/v1';
+
     return _normalizeApiBaseUrl(baseUrl);
   }
 
