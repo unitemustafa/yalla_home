@@ -10,6 +10,7 @@ import '../../data/courier_notifications_api.dart';
 import '../../data/courier_orders_api.dart';
 import '../../domain/courier_order.dart';
 import '../controllers/courier_notifications_controller.dart';
+import '../controllers/courier_profile_controller.dart';
 import '../widgets/delivery_confirmation_sheet.dart';
 import 'courier_notifications_view.dart';
 import 'courier_orders_view.dart';
@@ -29,6 +30,7 @@ class _CourierShellViewState extends State<CourierShellView> {
   final _api = const CourierOrdersApi();
   final _notificationsApi = const CourierNotificationsApi();
   final _notificationsController = CourierNotificationsController();
+  final _profileController = CourierProfileController();
   List<CourierOrder> _orders = [];
   bool _loading = true;
   String? _loadError;
@@ -39,6 +41,7 @@ class _CourierShellViewState extends State<CourierShellView> {
   void initState() {
     super.initState();
     _loadOrders();
+    unawaited(_profileController.loadAccountIfNeeded());
     unawaited(_refreshUnreadNotificationCount());
   }
 
@@ -46,6 +49,7 @@ class _CourierShellViewState extends State<CourierShellView> {
   void dispose() {
     _notificationsController.clear();
     _notificationsController.dispose();
+    _profileController.dispose();
     super.dispose();
   }
 
@@ -138,6 +142,7 @@ class _CourierShellViewState extends State<CourierShellView> {
         onNotificationsPressed: _openNotifications,
       ),
       CourierProfileView(
+        controller: _profileController,
         activeOrders: _activeOrders.length,
         deliveredOrders: _deliveredOrders.length,
         onActiveOrdersTap: () => setState(() => _selectedIndex = 0),

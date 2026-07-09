@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/constants/app_assets.dart';
 import '../../../../core/auth/auth_session.dart';
-import '../../../../core/constants/app_colors.dart';
 import '../../../../core/connectivity/internet_status_controller.dart';
+import '../../../../core/constants/app_assets.dart';
+import '../../../../core/constants/app_colors.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
 import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 import '../../../../core/theme/app_theme_controller.dart';
+import '../../domain/courier_account.dart';
+import '../controllers/courier_profile_controller.dart';
 
-class CourierProfileView extends StatelessWidget {
+class CourierProfileView extends StatefulWidget {
   const CourierProfileView({
     super.key,
     required this.activeOrders,
@@ -17,6 +19,7 @@ class CourierProfileView extends StatelessWidget {
     required this.onActiveOrdersTap,
     required this.onDeliveredSummaryTap,
     required this.onLogout,
+    this.controller,
   });
 
   final int activeOrders;
@@ -24,6 +27,39 @@ class CourierProfileView extends StatelessWidget {
   final VoidCallback onActiveOrdersTap;
   final VoidCallback onDeliveredSummaryTap;
   final VoidCallback onLogout;
+  final CourierProfileController? controller;
+
+  @override
+  State<CourierProfileView> createState() => _CourierProfileViewState();
+}
+
+class _CourierProfileViewState extends State<CourierProfileView> {
+  late CourierProfileController _controller;
+  late bool _ownsController;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = widget.controller ?? CourierProfileController();
+    _ownsController = widget.controller == null;
+    _controller.loadAccountIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant CourierProfileView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    if (_ownsController) _controller.dispose();
+    _controller = widget.controller ?? CourierProfileController();
+    _ownsController = widget.controller == null;
+    _controller.loadAccountIfNeeded();
+  }
+
+  @override
+  void dispose() {
+    if (_ownsController) _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,82 +70,185 @@ class CourierProfileView extends StatelessWidget {
 
     return ColoredBox(
       color: backgroundColor,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final maxWidth = constraints.maxWidth >= 760
-              ? 680.0
-              : constraints.maxWidth;
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return RefreshIndicator(
+            onRefresh: _controller.refresh,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final maxWidth = constraints.maxWidth >= 760
+                    ? 680.0
+                    : constraints.maxWidth;
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-            children: [
-              Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxWidth),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const PageTopBar(
-                        title: 'حساب المندوب',
-                        subtitle: 'بيانات الشيفت والحالة الحالية',
+                return ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                  children: [
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxWidth),
+                        child: _ProfileBody(
+                          activeOrders: widget.activeOrders,
+                          deliveredOrders: widget.deliveredOrders,
+                          onActiveOrdersTap: widget.onActiveOrdersTap,
+                          onDeliveredSummaryTap: widget.onDeliveredSummaryTap,
+                          onLogout: widget.onLogout,
+                          controller: _controller,
+                          isDark: isDark,
+                        ),
                       ),
-                      const SizedBox(height: 18),
-                      const _CourierHero(),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _CourierStat(
-                              icon: AppIcons.receipt_text,
-                              value: '$activeOrders',
-                              label: 'طلبات نشطة',
-                              color: AppColors.primary,
-                              onTap: onActiveOrdersTap,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _CourierStat(
-                              icon: AppIcons.tick_circle,
-                              value: '$deliveredOrders',
-                              label: 'إجمالي التسليم',
-                              color: AppColors.success,
-                              onTap: onDeliveredSummaryTap,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 22),
-                      _SettingsSection(
-                        title: 'إعدادات التشغيل',
-                        isDark: isDark,
-                        children: [
-                          const _SettingsInfoTile(
-                            icon: AppIcons.location,
-                            title: 'منطقة الشيفت',
-                            subtitle: 'القاهرة • متاح للتوصيل',
-                            accentColor: AppColors.success,
-                          ),
-                          _SettingsDivider(isDark: isDark),
-                          const _ThemeModeTile(),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      _LogoutButton(
-                        onPressed: () => _showLogoutDialog(context),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+                    ),
+                  ],
+                );
+              },
+            ),
           );
         },
       ),
     );
   }
+}
 
-  void _showLogoutDialog(BuildContext context) {
+class _ProfileBody extends StatelessWidget {
+  const _ProfileBody({
+    required this.activeOrders,
+    required this.deliveredOrders,
+    required this.onActiveOrdersTap,
+    required this.onDeliveredSummaryTap,
+    required this.onLogout,
+    required this.controller,
+    required this.isDark,
+  });
+
+  final int activeOrders;
+  final int deliveredOrders;
+  final VoidCallback onActiveOrdersTap;
+  final VoidCallback onDeliveredSummaryTap;
+  final VoidCallback onLogout;
+  final CourierProfileController controller;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final account = controller.account;
+    final errorMessage = controller.errorMessage;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const PageTopBar(
+          title: 'حساب المندوب',
+          subtitle: 'بيانات التشغيل وحالة الاتصال الحالية',
+        ),
+        const SizedBox(height: 18),
+        if (controller.isLoading && !controller.hasLoaded)
+          const _ProfileLoading()
+        else if (errorMessage != null && account == null)
+          _ProfileError(message: errorMessage, onRetry: controller.loadAccount)
+        else ...[
+          _CourierHero(account: account),
+          if (account?.profile == null) ...[
+            const SizedBox(height: 12),
+            const _IncompleteProfileNotice(),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _CourierStat(
+                  icon: AppIcons.receipt_text,
+                  value: '$activeOrders',
+                  label: 'طلبات نشطة',
+                  color: AppColors.primary,
+                  onTap: onActiveOrdersTap,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _CourierStat(
+                  icon: AppIcons.tick_circle,
+                  value: '$deliveredOrders',
+                  label: 'طلبات مسلّمة',
+                  color: AppColors.success,
+                  onTap: onDeliveredSummaryTap,
+                ),
+              ),
+            ],
+          ),
+          if (errorMessage != null) ...[
+            const SizedBox(height: 12),
+            _InlineProfileError(
+              message: errorMessage,
+              onRetry: controller.loadAccount,
+            ),
+          ],
+          const SizedBox(height: 22),
+          _SettingsSection(
+            title: 'بيانات تشغيل المندوب',
+            isDark: isDark,
+            children: [
+              _SettingsInfoTile(
+                icon: AppIcons.location,
+                title: 'مدينة الخدمة',
+                subtitle:
+                    account?.profile?.serviceCityLabel ??
+                    'مدينة الخدمة غير محددة',
+                accentColor: AppColors.info,
+              ),
+              _SettingsDivider(isDark: isDark),
+              _SettingsInfoTile(
+                icon: AppIcons.tick_circle,
+                title: 'حالة استقبال الطلبات',
+                subtitle:
+                    account?.profile?.availabilityLabel ?? 'الحالة غير معروفة',
+                accentColor: _availabilityColor(account?.profile?.isAvailable),
+              ),
+              _SettingsDivider(isDark: isDark),
+              _SettingsInfoTile(
+                icon: AppIcons.truck_fast,
+                title: 'نوع المركبة',
+                subtitle: account?.profile?.vehicleTypeLabel ?? 'غير محدد',
+                accentColor: AppColors.primary,
+              ),
+              _SettingsDivider(isDark: isDark),
+              _SettingsInfoTile(
+                icon: AppIcons.info_circle,
+                title: 'رقم اللوحة',
+                subtitle: account?.profile?.plateNumberLabel ?? 'غير محدد',
+                accentColor: AppColors.warning,
+              ),
+              _SettingsDivider(isDark: isDark),
+              _SettingsInfoTile(
+                icon: AppIcons.receipt_text,
+                title: 'الحد الأقصى للطلبات النشطة',
+                subtitle: account?.profile?.maxActiveOrdersLabel ?? 'غير محدد',
+                accentColor: AppColors.success,
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          _SettingsSection(
+            title: 'إعدادات التطبيق',
+            isDark: isDark,
+            children: const [_ThemeModeTile()],
+          ),
+          const SizedBox(height: 18),
+          _LogoutButton(onPressed: () => _showLogoutDialog(context, onLogout)),
+        ],
+      ],
+    );
+  }
+
+  Color _availabilityColor(bool? isAvailable) {
+    return switch (isAvailable) {
+      true => AppColors.success,
+      false => AppColors.error,
+      null => AppColors.warning,
+    };
+  }
+
+  void _showLogoutDialog(BuildContext context, VoidCallback onLogout) {
     showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -149,20 +288,136 @@ class CourierProfileView extends StatelessWidget {
   }
 }
 
-class _CourierHero extends StatelessWidget {
-  const _CourierHero();
+class _ProfileLoading extends StatelessWidget {
+  const _ProfileLoading();
 
   @override
   Widget build(BuildContext context) {
-    final user = AuthSession.instance.currentUser ?? const <String, dynamic>{};
-    final profile =
-        user['courier_profile'] as Map<String, dynamic>? ??
-        const <String, dynamic>{};
-    final name = [user['first_name'], user['last_name']]
-        .map((value) => value?.toString().trim() ?? '')
-        .where((value) => value.isNotEmpty)
-        .join(' ');
-    final area = profile['delivery_area_name']?.toString() ?? 'غير محدد';
+    return const SizedBox(
+      key: Key('courier_profile_loading'),
+      height: 260,
+      child: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _ProfileError extends StatelessWidget {
+  const _ProfileError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      key: const Key('courier_profile_error'),
+      height: 320,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(AppIcons.warning_2, color: AppColors.error, size: 34),
+            const SizedBox(height: 10),
+            Text(
+              'تعذر تحميل بيانات حساب المندوب',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 14),
+            ElevatedButton(
+              key: const Key('courier_profile_retry'),
+              onPressed: onRetry,
+              child: const Text('إعادة المحاولة'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineProfileError extends StatelessWidget {
+  const _InlineProfileError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          const Icon(AppIcons.warning_2, color: AppColors.warning, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+          TextButton(
+            key: const Key('courier_profile_inline_retry'),
+            onPressed: onRetry,
+            child: const Text('تحديث'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IncompleteProfileNotice extends StatelessWidget {
+  const _IncompleteProfileNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('courier_profile_missing_notice'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          const Icon(AppIcons.warning_2, color: AppColors.warning, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'بيانات تشغيل المندوب غير مكتملة.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CourierHero extends StatelessWidget {
+  const _CourierHero({required this.account});
+
+  final CourierAccount? account;
+
+  @override
+  Widget build(BuildContext context) {
+    final avatarUrl = AuthSession.instance.absoluteUrl(account?.avatarUrl);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -178,20 +433,7 @@ class _CourierHero extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.70)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Image.asset(AppAssets.blackLogo, fit: BoxFit.contain),
-            ),
-          ),
+          _CourierAvatar(avatarUrl: avatarUrl),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -201,7 +443,7 @@ class _CourierHero extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        name.isEmpty ? 'مندوب Yalla Home' : name,
+                        account?.displayName ?? 'مندوب Yalla Home',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: Colors.white,
                           fontSize: 20,
@@ -221,7 +463,7 @@ class _CourierHero extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$area • ${profile['is_available'] == false ? 'غير متاح' : 'متاح للتوصيل'}',
+                  account?.secondaryLabel ?? 'بيانات الاتصال غير محددة',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.78),
                     fontWeight: FontWeight.w700,
@@ -240,6 +482,45 @@ class _CourierHero extends StatelessWidget {
   }
 }
 
+class _CourierAvatar extends StatelessWidget {
+  const _CourierAvatar({required this.avatarUrl});
+
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 64,
+      height: 64,
+      padding: const EdgeInsets.all(7),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.70)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: avatarUrl == null
+            ? _fallbackAvatar()
+            : Image.network(
+                avatarUrl!,
+                key: const Key('courier_profile_avatar_network'),
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => _fallbackAvatar(),
+              ),
+      ),
+    );
+  }
+
+  Widget _fallbackAvatar() {
+    return Image.asset(
+      AppAssets.blackLogo,
+      key: const Key('courier_profile_avatar_fallback'),
+      fit: BoxFit.contain,
+    );
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge();
 
@@ -248,7 +529,10 @@ class _StatusBadge extends StatelessWidget {
     final statusController = InternetStatusScope.maybeOf(context);
 
     if (statusController == null) {
-      return const _StatusBadgeContent(label: 'Online', isOffline: false);
+      return const _StatusBadgeContent(
+        label: 'متصل بالإنترنت',
+        isOffline: false,
+      );
     }
 
     return AnimatedBuilder(
@@ -257,7 +541,7 @@ class _StatusBadge extends StatelessWidget {
         final isOffline = statusController.isOffline;
 
         return _StatusBadgeContent(
-          label: isOffline ? 'Offline' : 'Online',
+          label: isOffline ? 'غير متصل بالإنترنت' : 'متصل بالإنترنت',
           isOffline: isOffline,
         );
       },
@@ -282,7 +566,7 @@ class _StatusBadgeContent extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        label,
+        'حالة الاتصال: $label',
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.w900,
@@ -419,8 +703,8 @@ class _SettingsDivider extends StatelessWidget {
   }
 }
 
-class _ThemeModeTile extends _ThemeModeTileBase {
-  const _ThemeModeTile() : super();
+class _ThemeModeTile extends StatelessWidget {
+  const _ThemeModeTile();
 
   @override
   Widget build(BuildContext context) {
@@ -493,28 +777,53 @@ class _ThemeModeTile extends _ThemeModeTileBase {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (sheetContext) {
-        return _ThemeSelectionSheet(
-          title: 'ثيم التطبيق',
-          children: [
-            for (final themeMode in themeModes) ...[
-              _ThemeOptionTile(
-                title: _themeModeLabel(themeMode),
-                subtitle: _themeModeSubtitle(themeMode),
-                icon: _themeModeIcon(themeMode),
-                accentColor: _themeModeAccentColor(themeMode),
-                isSelected: currentMode == themeMode,
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  AppThemeController.instance.setThemeMode(themeMode);
-                  CustomSnackBar.showSuccess(
-                    context: context,
-                    title: 'تم تحديث الثيم',
-                  );
-                },
-              ),
-              if (themeMode != themeModes.last) const SizedBox(height: 10),
-            ],
-          ],
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.32),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'ثيم التطبيق',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 14),
+                for (final themeMode in themeModes) ...[
+                  _ThemeOptionTile(
+                    title: _themeModeLabel(themeMode),
+                    subtitle: _themeModeSubtitle(themeMode),
+                    icon: _themeModeIcon(themeMode),
+                    accentColor: _themeModeAccentColor(themeMode),
+                    isSelected: currentMode == themeMode,
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      AppThemeController.instance.setThemeMode(themeMode);
+                      CustomSnackBar.showSuccess(
+                        context: context,
+                        title: 'تم تحديث الثيم',
+                      );
+                    },
+                  ),
+                  if (themeMode != themeModes.last) const SizedBox(height: 10),
+                ],
+              ],
+            ),
+          ),
         );
       },
     );
@@ -550,48 +859,6 @@ class _ThemeModeTile extends _ThemeModeTileBase {
       ThemeMode.light => AppColors.warning,
       ThemeMode.dark => const Color(0xFF8B5CF6),
     };
-  }
-}
-
-class _ThemeSelectionSheet extends StatelessWidget {
-  const _ThemeSelectionSheet({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.32),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 14),
-            ...children,
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -682,162 +949,6 @@ class _ThemeOptionTile extends StatelessWidget {
   }
 }
 
-class _ThemeModeTileBase extends StatelessWidget {
-  const _ThemeModeTileBase();
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark
-        ? AppColors.darkTextPrimary
-        : AppColors.lightTextPrimary;
-    final mutedColor = isDark
-        ? AppColors.darkTextSecondary
-        : AppColors.lightTextSecondary;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'ثيم التطبيق',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: textColor,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'غيّر شكل التطبيق من هنا',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: mutedColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              const _SettingsTileIcon(
-                icon: AppIcons.setting_2,
-                color: AppColors.info,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ValueListenableBuilder<ThemeMode>(
-            valueListenable: AppThemeController.instance,
-            builder: (context, mode, _) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
-              final borderColor = isDark
-                  ? AppColors.darkCardColor
-                  : Colors.grey.shade300;
-
-              Widget buildSegment({
-                required ThemeMode value,
-                required String label,
-                required IconData icon,
-                bool isFirst = false,
-                bool isLast = false,
-              }) {
-                final isSelected = mode == value;
-                final bgActive = isSelected
-                    ? AppColors.primary.withValues(alpha: 0.12)
-                    : Colors.transparent;
-                final fgActive = isDark
-                    ? Colors.white
-                    : AppColors.lightTextPrimary;
-
-                return Expanded(
-                  child: InkWell(
-                    onTap: () =>
-                        AppThemeController.instance.setThemeMode(value),
-                    borderRadius: BorderRadius.horizontal(
-                      right: isFirst ? const Radius.circular(28) : Radius.zero,
-                      left: isLast ? const Radius.circular(28) : Radius.zero,
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: bgActive,
-                        borderRadius: BorderRadius.horizontal(
-                          right: isFirst
-                              ? const Radius.circular(28)
-                              : Radius.zero,
-                          left: isLast
-                              ? const Radius.circular(28)
-                              : Radius.zero,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            label,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  fontWeight: isSelected
-                                      ? FontWeight.w900
-                                      : FontWeight.w700,
-                                  color: fgActive,
-                                ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(icon, size: 18, color: fgActive),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              return Container(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.darkSurface
-                      : AppColors.lightBackground,
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: borderColor, width: 1.5),
-                ),
-                child: Row(
-                  children: [
-                    buildSegment(
-                      value: ThemeMode.system,
-                      label: 'النظام',
-                      icon: Icons.smartphone_rounded,
-                      isFirst: true,
-                    ),
-                    Container(width: 1.5, height: 24, color: borderColor),
-                    buildSegment(
-                      value: ThemeMode.light,
-                      label: 'فاتح',
-                      icon: Icons.wb_sunny_rounded,
-                    ),
-                    Container(width: 1.5, height: 24, color: borderColor),
-                    buildSegment(
-                      value: ThemeMode.dark,
-                      label: 'داكن',
-                      icon: Icons.nightlight_round,
-                      isLast: true,
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SettingsInfoTile extends StatelessWidget {
   const _SettingsInfoTile({
     required this.icon,
@@ -861,47 +972,41 @@ class _SettingsInfoTile extends StatelessWidget {
         ? AppColors.darkTextSecondary
         : AppColors.lightTextSecondary;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              _SettingsTileIcon(icon: icon, color: accentColor),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: textColor,
-                        fontWeight: FontWeight.w900,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle!,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: mutedColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          _SettingsTileIcon(icon: icon, color: accentColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: textColor,
+                    fontWeight: FontWeight.w900,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: mutedColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

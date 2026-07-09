@@ -8,9 +8,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:yalla_home/core/theme/app_theme_controller.dart';
 import 'package:yalla_home/features/deliveries/data/courier_notifications_api.dart';
 import 'package:yalla_home/features/deliveries/data/courier_orders_api.dart';
+import 'package:yalla_home/features/deliveries/data/courier_profile_api.dart';
 import 'package:yalla_home/features/deliveries/domain/courier_notification.dart';
 import 'package:yalla_home/features/deliveries/domain/courier_order.dart';
+import 'package:yalla_home/features/deliveries/domain/courier_account.dart';
 import 'package:yalla_home/features/deliveries/presentation/controllers/courier_notifications_controller.dart';
+import 'package:yalla_home/features/deliveries/presentation/controllers/courier_profile_controller.dart';
 import 'package:yalla_home/features/deliveries/presentation/views/courier_notifications_view.dart';
 import 'package:yalla_home/features/deliveries/presentation/views/courier_orders_view.dart';
 import 'package:yalla_home/features/deliveries/presentation/views/courier_profile_view.dart';
@@ -803,29 +806,253 @@ void main() {
     expect(source, contains('Image.memory'));
   });
 
-  testWidgets('profile stats navigate and theme can change inside app', (
+  test('parses real auth/me courier profile response', () {
+    final account = CourierProfileApi.parseUserResponse(
+      _courierAccountJson(isAvailable: true),
+    );
+
+    expect(account.role, 'representative');
+    expect(account.displayName, 'مصطفى علي');
+    expect(account.secondaryLabel, '@captain_mostafa');
+    expect(account.avatarUrl, '/media/avatars/courier.png');
+    expect(account.profile?.serviceCityName, 'الجيزة');
+    expect(account.profile?.vehicleType, 'دراجة نارية');
+    expect(account.profile?.plateNumber, 'ج ي ز 1234');
+    expect(account.profile?.maxActiveOrders, 4);
+    expect(account.profile?.isAvailable, isTrue);
+  });
+
+  testWidgets('profile shows loaded account fields and avatar url', (
     WidgetTester tester,
   ) async {
-    AppThemeController.instance.setThemeMode(ThemeMode.system);
-    var activeTapped = false;
-    var deliveredTapped = false;
-
     await tester.pumpWidget(
       _TestApp(
         child: CourierProfileView(
+          controller: _profileControllerWith([
+            _courierAccount(isAvailable: true),
+          ]),
           activeOrders: 3,
           deliveredOrders: 1,
-          onActiveOrdersTap: () => activeTapped = true,
-          onDeliveredSummaryTap: () => deliveredTapped = true,
+          onActiveOrdersTap: () {},
+          onDeliveredSummaryTap: () {},
           onLogout: () {},
         ),
       ),
     );
+    await tester.pump();
+
+    expect(find.text('مصطفى علي'), findsOneWidget);
+    expect(find.text('@captain_mostafa'), findsOneWidget);
+    expect(find.text('مدينة الخدمة'), findsOneWidget);
+    expect(find.text('الجيزة'), findsOneWidget);
+    expect(find.text('متاح لاستقبال الطلبات'), findsOneWidget);
+    expect(find.text('نوع المركبة'), findsOneWidget);
+    expect(find.text('دراجة نارية'), findsOneWidget);
+    expect(find.text('رقم اللوحة'), findsOneWidget);
+    expect(find.text('ج ي ز 1234'), findsOneWidget);
+    expect(find.text('الحد الأقصى للطلبات النشطة'), findsOneWidget);
+    expect(find.text('4'), findsOneWidget);
+  });
+
+  testWidgets(
+    'profile shows unavailable state without tying it to connection',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _TestApp(
+          child: CourierProfileView(
+            controller: _profileControllerWith([
+              _courierAccount(isAvailable: false),
+            ]),
+            activeOrders: 0,
+            deliveredOrders: 0,
+            onActiveOrdersTap: () {},
+            onDeliveredSummaryTap: () {},
+            onLogout: () {},
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('غير متاح حاليًا'), findsOneWidget);
+      expect(find.textContaining('حالة الاتصال:'), findsOneWidget);
+      expect(find.text('Online'), findsNothing);
+      expect(find.text('Offline'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'profile does not assume available when is_available is missing',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _TestApp(
+          child: CourierProfileView(
+            controller: _profileControllerWith([
+              _courierAccount(isAvailable: null),
+            ]),
+            activeOrders: 0,
+            deliveredOrders: 0,
+            onActiveOrdersTap: () {},
+            onDeliveredSummaryTap: () {},
+            onLogout: () {},
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('الحالة غير معروفة'), findsOneWidget);
+      expect(find.text('متاح لاستقبال الطلبات'), findsNothing);
+    },
+  );
+
+  testWidgets('profile uses safe fallbacks for missing courier fields', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierProfileView(
+          controller: _profileControllerWith([
+            CourierAccount.fromJson({
+              ..._courierAccountJson(),
+              'avatar_url': null,
+              'courier_profile': null,
+            }),
+          ]),
+          activeOrders: 0,
+          deliveredOrders: 0,
+          onActiveOrdersTap: () {},
+          onDeliveredSummaryTap: () {},
+          onLogout: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('courier_profile_avatar_fallback')),
+      findsOneWidget,
+    );
+    expect(find.text('بيانات تشغيل المندوب غير مكتملة.'), findsOneWidget);
+    expect(find.text('مدينة الخدمة غير محددة'), findsOneWidget);
+    expect(find.text('الحالة غير معروفة'), findsOneWidget);
+    expect(find.text('غير محدد'), findsWidgets);
+  });
+
+  test('profile page has no fixed Cairo city or delivery area name flow', () {
+    final profileSource = File(
+      'lib/features/deliveries/presentation/views/courier_profile_view.dart',
+    ).readAsStringSync();
+    final modelSource = File(
+      'lib/features/deliveries/domain/courier_account.dart',
+    ).readAsStringSync();
+
+    expect(profileSource, contains('AuthSession.instance.absoluteUrl'));
+    expect(profileSource, contains('Image.network'));
+    expect(profileSource, isNot(contains('القاهرة')));
+    expect(profileSource, isNot(contains('delivery_area_name')));
+    expect(modelSource, isNot(contains('delivery_area_name')));
+  });
+
+  testWidgets('profile shows loading, error, and retry', (
+    WidgetTester tester,
+  ) async {
+    final failedLoad = Completer<CourierAccount>();
+    final api = _FakeProfileApi()..loadCompleter = failedLoad;
+    final controller = CourierProfileController(api: api);
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierProfileView(
+          controller: controller,
+          activeOrders: 0,
+          deliveredOrders: 0,
+          onActiveOrdersTap: () {},
+          onDeliveredSummaryTap: () {},
+          onLogout: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('courier_profile_loading')), findsOneWidget);
+    failedLoad.completeError(Exception('انقطع الاتصال'));
+    await tester.pump();
+
+    expect(find.byKey(const Key('courier_profile_error')), findsOneWidget);
+    expect(find.text('تعذر تحميل بيانات حساب المندوب'), findsOneWidget);
+
+    api.accounts = [_courierAccount(serviceCityName: 'الإسكندرية')];
+    await tester.tap(find.byKey(const Key('courier_profile_retry')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(api.loadCalls, 2);
+    expect(find.text('الإسكندرية'), findsOneWidget);
+  });
+
+  testWidgets('profile pull to refresh reloads auth me data', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeProfileApi(
+      accounts: [
+        _courierAccount(serviceCityName: 'الجيزة'),
+        _courierAccount(serviceCityName: 'الإسكندرية'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierProfileView(
+          controller: CourierProfileController(api: api),
+          activeOrders: 0,
+          deliveredOrders: 0,
+          onActiveOrdersTap: () {},
+          onDeliveredSummaryTap: () {},
+          onLogout: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('الجيزة'), findsOneWidget);
+    await tester.drag(find.byType(ListView), const Offset(0, 320));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(api.loadCalls, 2);
+    expect(find.text('الإسكندرية'), findsOneWidget);
+  });
+
+  testWidgets('profile stats navigate, theme changes, and logout confirms', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    AppThemeController.instance.setThemeMode(ThemeMode.system);
+    var activeTapped = false;
+    var deliveredTapped = false;
+    var loggedOut = false;
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierProfileView(
+          controller: _profileControllerWith([_courierAccount()]),
+          activeOrders: 3,
+          deliveredOrders: 1,
+          onActiveOrdersTap: () => activeTapped = true,
+          onDeliveredSummaryTap: () => deliveredTapped = true,
+          onLogout: () => loggedOut = true,
+        ),
+      ),
+    );
+    await tester.pump();
 
     await tester.tap(find.text('طلبات نشطة'));
     expect(activeTapped, isTrue);
 
-    await tester.tap(find.text('إجمالي التسليم'));
+    await tester.tap(find.text('طلبات مسلّمة'));
     expect(deliveredTapped, isTrue);
 
     await tester.tap(find.text('ثيم التطبيق'));
@@ -833,6 +1060,13 @@ void main() {
     await tester.tap(find.text('داكن').last);
     await tester.pump();
     expect(AppThemeController.instance.value, ThemeMode.dark);
+
+    await tester.tap(find.text('تسجيل الخروج'));
+    await tester.pumpAndSettle();
+    expect(find.text('متأكد إنك عايز تسجل خروج؟'), findsOneWidget);
+    await tester.tap(find.text('تأكيد'));
+    await tester.pumpAndSettle();
+    expect(loggedOut, isTrue);
 
     AppThemeController.instance.setThemeMode(ThemeMode.system);
   });
@@ -931,6 +1165,78 @@ class _TestApp extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FakeProfileApi extends CourierProfileApi {
+  _FakeProfileApi({List<CourierAccount>? accounts})
+    : accounts = accounts ?? const [];
+
+  List<CourierAccount> accounts;
+  Completer<CourierAccount>? loadCompleter;
+  Object? loadError;
+  int loadCalls = 0;
+
+  @override
+  Future<CourierAccount> loadAccount() async {
+    loadCalls += 1;
+    final completer = loadCompleter;
+    if (completer != null) {
+      loadCompleter = null;
+      return completer.future;
+    }
+    if (loadError != null) throw loadError!;
+    if (accounts.isEmpty) return _courierAccount();
+    if (accounts.length == 1) return accounts.single;
+    return accounts.removeAt(0);
+  }
+}
+
+CourierProfileController _profileControllerWith(List<CourierAccount> accounts) {
+  return CourierProfileController(api: _FakeProfileApi(accounts: accounts));
+}
+
+CourierAccount _courierAccount({
+  bool? isAvailable = true,
+  String serviceCityName = 'الجيزة',
+  String? avatarUrl,
+}) {
+  return CourierAccount.fromJson(
+    _courierAccountJson(
+      isAvailable: isAvailable,
+      serviceCityName: serviceCityName,
+      avatarUrl: avatarUrl,
+    ),
+  );
+}
+
+Map<String, dynamic> _courierAccountJson({
+  bool? isAvailable = true,
+  String serviceCityName = 'الجيزة',
+  String? avatarUrl = '/media/avatars/courier.png',
+}) {
+  final courierProfile = <String, dynamic>{
+    'vehicle_type': 'دراجة نارية',
+    'plate_number': 'ج ي ز 1234',
+    'delivery_area': null,
+    'service_city': 2,
+    'service_city_name': serviceCityName,
+    'max_active_orders': 4,
+  };
+  if (isAvailable != null) {
+    courierProfile['is_available'] = isAvailable;
+  }
+
+  return {
+    'id': '7',
+    'first_name': 'مصطفى',
+    'last_name': 'علي',
+    'username': 'captain_mostafa',
+    'email': 'captain@example.com',
+    'phone': '+201001234567',
+    'avatar_url': avatarUrl,
+    'role': 'representative',
+    'courier_profile': courierProfile,
+  };
 }
 
 class _FakeNotificationsApi extends CourierNotificationsApi {
