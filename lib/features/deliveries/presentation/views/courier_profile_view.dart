@@ -5,6 +5,7 @@ import '../../../../core/connectivity/internet_status_controller.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/icons/app_icons.dart';
+import '../../../../core/presentation/widgets/network_image_or_placeholder.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
 import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 import '../../../../core/theme/app_theme_controller.dart';
@@ -500,23 +501,15 @@ class _CourierAvatar extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(6),
-        child: avatarUrl == null
-            ? _fallbackAvatar()
-            : Image.network(
-                avatarUrl!,
-                key: const Key('courier_profile_avatar_network'),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => _fallbackAvatar(),
-              ),
+        child: NetworkImageOrPlaceholder(
+          url: avatarUrl,
+          placeholderAsset: AppAssets.defaultCourier,
+          imageKey: const Key('courier_profile_avatar_network'),
+          placeholderKey: const Key('courier_profile_avatar_fallback'),
+          fit: BoxFit.cover,
+          semanticLabel: 'صورة المندوب',
+        ),
       ),
-    );
-  }
-
-  Widget _fallbackAvatar() {
-    return Image.asset(
-      AppAssets.blackLogo,
-      key: const Key('courier_profile_avatar_fallback'),
-      fit: BoxFit.contain,
     );
   }
 }

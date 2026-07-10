@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/formatters/app_currency.dart';
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/app_action_button.dart';
+import '../../../../core/presentation/widgets/network_image_or_placeholder.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
 import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 import '../../data/courier_orders_api.dart';
@@ -573,19 +575,14 @@ class _CustomerAvatar extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       clipBehavior: Clip.antiAlias,
-      child: avatarUrl == null || avatarUrl.isEmpty
-          ? Icon(AppIcons.user, color: AppColors.primary, size: size * 0.52)
-          : Image.network(
-              avatarUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Icon(
-                  AppIcons.user,
-                  color: AppColors.primary,
-                  size: size * 0.52,
-                );
-              },
-            ),
+      child: NetworkImageOrPlaceholder(
+        url: avatarUrl,
+        placeholderAsset: AppAssets.defaultUserAvatar,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        semanticLabel: 'صورة العميل',
+      ),
     );
   }
 }
@@ -753,11 +750,13 @@ class _DeliveryProofCard extends StatelessWidget {
         else if (proofUrl != null)
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: Image.network(
-              proofUrl,
+            child: NetworkImageOrPlaceholder(
+              url: proofUrl,
+              placeholderAsset: AppAssets.defaultProduct,
               fit: BoxFit.cover,
               width: double.infinity,
               height: 160,
+              semanticLabel: 'صورة المنتج',
             ),
           )
         else

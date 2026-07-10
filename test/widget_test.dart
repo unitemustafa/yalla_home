@@ -802,7 +802,7 @@ void main() {
 
     expect(source, contains('order.deliveryProof'));
     expect(source, contains('order.deliveryProofUrl'));
-    expect(source, contains('Image.network'));
+    expect(source, contains('NetworkImageOrPlaceholder'));
     expect(source, contains('Image.memory'));
   });
 
@@ -946,7 +946,7 @@ void main() {
     ).readAsStringSync();
 
     expect(profileSource, contains('AuthSession.instance.absoluteUrl'));
-    expect(profileSource, contains('Image.network'));
+    expect(profileSource, contains('NetworkImageOrPlaceholder'));
     expect(profileSource, isNot(contains('القاهرة')));
     expect(profileSource, isNot(contains('delivery_area_name')));
     expect(modelSource, isNot(contains('delivery_area_name')));
