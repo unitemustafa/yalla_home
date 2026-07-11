@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/constants/app_constants.dart';
+import 'core/auth/password_changed_notifier.dart';
 import 'core/auth/session_expired_notifier.dart';
 import 'core/presentation/widgets/offline_connection_banner.dart';
 import 'core/routing/app_navigator.dart';
@@ -19,17 +20,94 @@ class YallaHomeApp extends StatefulWidget {
 
 class _YallaHomeAppState extends State<YallaHomeApp> {
   int _handledSessionExpiredEventId = 0;
+  int _handledPasswordChangedEventId = 0;
 
   @override
   void initState() {
     super.initState();
     SessionExpiredNotifier.instance.addListener(_handleSessionExpired);
+    PasswordChangedNotifier.instance.addListener(_handlePasswordChanged);
   }
 
   @override
   void dispose() {
     SessionExpiredNotifier.instance.removeListener(_handleSessionExpired);
+    PasswordChangedNotifier.instance.removeListener(_handlePasswordChanged);
     super.dispose();
+  }
+
+  void _handlePasswordChanged() {
+    final eventId = PasswordChangedNotifier.instance.eventId;
+    if (eventId == _handledPasswordChangedEventId) return;
+    _handledPasswordChangedEventId = eventId;
+    _showPasswordChangedDialog();
+  }
+
+  void _showPasswordChangedDialog() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigatorContext = AppNavigator.key.currentContext;
+      if (navigatorContext == null) return;
+
+      showDialog<void>(
+        context: navigatorContext,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
+          final surfaceColor = isDark ? const Color(0xFF242426) : Colors.white;
+          final textColor = isDark ? Colors.white : Colors.black87;
+          final mutedColor = isDark
+              ? Colors.white.withValues(alpha: 0.66)
+              : Colors.black.withValues(alpha: 0.58);
+
+          return AlertDialog(
+            backgroundColor: surfaceColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            icon: const Icon(
+              Icons.lock_reset_rounded,
+              color: Color(0xFF4F60F6),
+              size: 34,
+            ),
+            title: Text(
+              'تم تغيير كلمة المرور',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w900),
+            ),
+            content: Text(
+              'تم تغيير كلمة مرور حسابك. سجّل الدخول بكلمة المرور الجديدة للمتابعة.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: mutedColor,
+                height: 1.45,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    AppNavigator.goToLogin();
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF4F60F6),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('تسجيل الدخول'),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    });
   }
 
   void _handleSessionExpired() {

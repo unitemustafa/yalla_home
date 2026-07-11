@@ -74,7 +74,7 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
     try {
       await _controller.deleteNotification(notification);
       if (!mounted) return true;
-      CustomSnackBar.showSuccess(context: context, title: 'تم حذف الإشعار');
+      CustomSnackBar.showError(context: context, title: 'تم حذف الإشعار');
       return true;
     } catch (error) {
       if (!mounted) return false;

@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../network/api_exception.dart';
+import 'password_changed_notifier.dart';
 import 'session_expired_notifier.dart';
 
 enum AuthRestoreResult { restored, noSession, expired, temporaryFailure }
@@ -61,6 +62,7 @@ class AuthSession {
   DateTime? _sessionExpiresAt;
   bool _rememberSession = false;
   bool _sessionExpiredEventSent = false;
+  bool _passwordChanged = false;
   int _sessionVersion = 0;
 
   Map<String, dynamic>? currentUser;
@@ -112,6 +114,7 @@ class AuthSession {
     _sessionExpiresAt = expiresAt;
     _rememberSession = true;
     _sessionExpiredEventSent = false;
+    _passwordChanged = false;
     _scheduleExpiryTimer();
 
     try {
@@ -125,7 +128,9 @@ class AuthSession {
       return AuthRestoreResult.expired;
     } on ApiException catch (error) {
       if (_isAuthenticationFailure(error.statusCode)) {
-        await _expireSession(notify: true);
+        final passwordChanged = error.message == _passwordChangedMessage;
+        if (passwordChanged) _notifyPasswordChanged();
+        await _expireSession(notify: !passwordChanged);
         return AuthRestoreResult.expired;
       }
       return AuthRestoreResult.temporaryFailure;
@@ -176,6 +181,7 @@ class AuthSession {
     _sessionVersion += 1;
     _rememberSession = remember;
     _sessionExpiredEventSent = false;
+    _passwordChanged = false;
     _sessionExpiresAt = DateTime.now().toUtc().add(
       remember ? _rememberedSessionDuration : _temporarySessionDuration,
     );
@@ -337,6 +343,7 @@ class AuthSession {
     _sessionExpiresAt = null;
     _rememberSession = false;
     _sessionExpiredEventSent = false;
+    _passwordChanged = false;
     _refreshInFlight = null;
     _expiryTimer?.cancel();
     _expiryTimer = null;
@@ -423,6 +430,11 @@ class AuthSession {
     try {
       await _refreshOnce();
       return _accessToken != null;
+    } on ApiException catch (error) {
+      final passwordChanged = error.message == _passwordChangedMessage;
+      if (passwordChanged) _notifyPasswordChanged();
+      await _expireSession(notify: !passwordChanged);
+      return false;
     } catch (_) {
       await _expireSession(notify: true);
       return false;
@@ -471,6 +483,9 @@ class AuthSession {
     );
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (_isPasswordChangedResponse(data)) {
+        throw const ApiException(_passwordChangedMessage, statusCode: 401);
+      }
       throw ApiException(
         _message(
           data,
@@ -512,8 +527,10 @@ class AuthSession {
   Future<void> _ensureSessionStillActive() async {
     if (!_isSessionExpired()) return;
     await _expireSession(notify: true);
-    throw const ApiException(
-      '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
+    throw ApiException(
+      _passwordChanged
+          ? _passwordChangedMessage
+          : '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
     );
   }
 
@@ -528,7 +545,7 @@ class AuthSession {
   }
 
   Future<void> _expireSession({required bool notify}) async {
-    final shouldNotify = notify && !_sessionExpiredEventSent;
+    final shouldNotify = notify && !_sessionExpiredEventSent && !_passwordChanged;
     _sessionVersion += 1;
     _accessToken = null;
     _refreshToken = null;
@@ -555,6 +572,23 @@ class AuthSession {
     } catch (_) {
       return null;
     }
+  }
+
+  bool _hasErrorCode(dynamic data, String expectedCode) {
+    return data is Map && data['code']?.toString() == expectedCode;
+  }
+
+  bool _isPasswordChangedResponse(dynamic data) {
+    if (_hasErrorCode(data, 'password_changed')) return true;
+    if (data is! Map) return false;
+    final detail = data['detail']?.toString().toLowerCase() ?? '';
+    return detail.contains('password changed');
+  }
+
+  void _notifyPasswordChanged() {
+    if (_passwordChanged) return;
+    _passwordChanged = true;
+    PasswordChangedNotifier.instance.notifyPasswordChanged();
   }
 
   String _message(dynamic data, String fallback) {
@@ -623,4 +657,5 @@ class AuthSession {
 
   static const _invalidCredentialsMessage =
       '\u0627\u0644\u0625\u064a\u0645\u064a\u0644 \u0623\u0648 \u0643\u0644\u0645\u0629 \u0627\u0644\u0633\u0631 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d\u064a\u0646.';
+  static const _passwordChangedMessage = 'تم تغيير كلمة المرور.';
 }

@@ -26,7 +26,8 @@ class CourierShellView extends StatefulWidget {
   State<CourierShellView> createState() => _CourierShellViewState();
 }
 
-class _CourierShellViewState extends State<CourierShellView> {
+class _CourierShellViewState extends State<CourierShellView>
+    with WidgetsBindingObserver {
   final _api = const CourierOrdersApi();
   final _notificationsApi = const CourierNotificationsApi();
   final _notificationsController = CourierNotificationsController();
@@ -36,21 +37,53 @@ class _CourierShellViewState extends State<CourierShellView> {
   String? _loadError;
   int _selectedIndex = 0;
   int _unreadNotificationCount = 0;
+  Timer? _remoteStateRefreshTimer;
+  bool _refreshingRemoteState = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadOrders();
     unawaited(_profileController.loadAccountIfNeeded());
     unawaited(_refreshUnreadNotificationCount());
+    _remoteStateRefreshTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => unawaited(_refreshRemoteState()),
+    );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _remoteStateRefreshTimer?.cancel();
     _notificationsController.clear();
     _notificationsController.dispose();
     _profileController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshRemoteState());
+    }
+  }
+
+  Future<void> _refreshRemoteState() async {
+    if (!mounted || _refreshingRemoteState) return;
+
+    _refreshingRemoteState = true;
+    try {
+      await Future.wait([
+        _profileController.refresh(),
+        _refreshUnreadNotificationCount(),
+      ]);
+    } catch (_) {
+      // A temporary refresh failure must not interrupt the courier workflow.
+    } finally {
+      _refreshingRemoteState = false;
+    }
   }
 
   List<CourierOrder> get _activeOrders {
@@ -176,7 +209,10 @@ class _CourierShellViewState extends State<CourierShellView> {
       ),
       bottomNavigationBar: _CourierBottomNavigationBar(
         selectedIndex: _selectedIndex,
-        onSelected: (index) => setState(() => _selectedIndex = index),
+        onSelected: (index) {
+          setState(() => _selectedIndex = index);
+          if (index == 2) unawaited(_refreshRemoteState());
+        },
       ),
     );
   }
@@ -204,6 +240,8 @@ class _CourierShellViewState extends State<CourierShellView> {
   }
 
   Future<void> _openNotifications() async {
+    await _notificationsController.refreshNotifications();
+    if (!mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute<void>(
