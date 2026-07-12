@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "249021956753",
+    "project_id": "yalla-market-bf2f6",
+    "storage_bucket": "yalla-market-bf2f6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:249021956753:android:42966109cf34fd49c8b530",
+        "android_client_info": {
+          "package_name": "com.yallamarket.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyArRRIqlTBtS3HzVSvAo_5iA04DQq2Jw7Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:249021956753:android:26b057d2063f3d6bc8b530",
+        "android_client_info": {
+          "package_name": "com.yallamarket.yalla_home"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyArRRIqlTBtS3HzVSvAo_5iA04DQq2Jw7Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

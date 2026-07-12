@@ -63,6 +63,7 @@ class AuthSession {
   bool _rememberSession = false;
   bool _sessionExpiredEventSent = false;
   bool _passwordChanged = false;
+  bool _accountInactiveHandled = false;
   int _sessionVersion = 0;
 
   Map<String, dynamic>? currentUser;
@@ -115,6 +116,7 @@ class AuthSession {
     _rememberSession = true;
     _sessionExpiredEventSent = false;
     _passwordChanged = false;
+    _accountInactiveHandled = false;
     _scheduleExpiryTimer();
 
     try {
@@ -155,6 +157,7 @@ class AuthSession {
       }),
     );
     final data = _decode(response);
+    await _handleAccountInactiveResponse(data);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
         _message(
@@ -182,6 +185,7 @@ class AuthSession {
     _rememberSession = remember;
     _sessionExpiredEventSent = false;
     _passwordChanged = false;
+    _accountInactiveHandled = false;
     _sessionExpiresAt = DateTime.now().toUtc().add(
       remember ? _rememberedSessionDuration : _temporarySessionDuration,
     );
@@ -344,6 +348,7 @@ class AuthSession {
     _rememberSession = false;
     _sessionExpiredEventSent = false;
     _passwordChanged = false;
+    _accountInactiveHandled = false;
     _refreshInFlight = null;
     _expiryTimer?.cancel();
     _expiryTimer = null;
@@ -420,8 +425,14 @@ class AuthSession {
   }) async {
     await _ensureSessionStillActive();
     var response = await send();
+    if (response is http.Response) {
+      await _handleAccountInactiveResponse(_decode(response));
+    }
     if (statusCode(response) == 401 && await _tryRefresh()) {
       response = await send();
+      if (response is http.Response) {
+        await _handleAccountInactiveResponse(_decode(response));
+      }
     }
     return response;
   }
@@ -545,7 +556,8 @@ class AuthSession {
   }
 
   Future<void> _expireSession({required bool notify}) async {
-    final shouldNotify = notify && !_sessionExpiredEventSent && !_passwordChanged;
+    final shouldNotify =
+        notify && !_sessionExpiredEventSent && !_passwordChanged;
     _sessionVersion += 1;
     _accessToken = null;
     _refreshToken = null;
@@ -576,6 +588,14 @@ class AuthSession {
 
   bool _hasErrorCode(dynamic data, String expectedCode) {
     return data is Map && data['code']?.toString() == expectedCode;
+  }
+
+  Future<void> _handleAccountInactiveResponse(dynamic data) async {
+    if (!_hasErrorCode(data, 'account_inactive') || _accountInactiveHandled) {
+      return;
+    }
+    _accountInactiveHandled = true;
+    await _expireSession(notify: true);
   }
 
   bool _isPasswordChangedResponse(dynamic data) {

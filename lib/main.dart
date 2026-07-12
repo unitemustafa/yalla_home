@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'core/auth/auth_session.dart';
+import 'core/notifications/courier_push_service.dart';
 import 'yalla_home_app.dart';
 
 Future<void> main() async {
@@ -9,6 +10,7 @@ Future<void> main() async {
   // Fail immediately if a release build was created without
   // the production backend URL.
   AuthSession.apiBaseUrl;
+  await CourierPushService.instance.initialize();
 
   runApp(const YallaHomeApp());
 }

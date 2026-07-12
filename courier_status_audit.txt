@@ -1,0 +1,1956 @@
+﻿=== GIT STATUS ===
+ M lib/features/auth/presentation/views/login_view.dart
+ M lib/features/deliveries/presentation/views/courier_notifications_view.dart
+ M lib/features/deliveries/presentation/views/courier_profile_view.dart
+ M lib/features/deliveries/presentation/views/courier_shell_view.dart
+ M lib/features/deliveries/presentation/views/delivered_history_view.dart
+ M test/widget_test.dart
+?? courier_status_audit.txt
+16fac03 Update application features and account flows
+
+=== FIREBASE / NOTIFICATION PACKAGES ===
+
+
+=== PERIODIC TIMERS AND LOOPS ===
+
+  lib\core\connectivity\internet_status_controller.dart:27:
+  lib\core\connectivity\internet_status_controller.dart:28:    _subscription = _connectivity.onConnectivityChanged.listen(
+  lib\core\connectivity\internet_status_controller.dart:29:      (result) => unawaited(_updateFromConnectivity(result)),
+  lib\core\connectivity\internet_status_controller.dart:30:      onError: (_) => _setStatus(isOffline: false),
+  lib\core\connectivity\internet_status_controller.dart:31:    );
+> lib\core\connectivity\internet_status_controller.dart:32:    _verificationTimer = Timer.periodic(
+  lib\core\connectivity\internet_status_controller.dart:33:      const Duration(seconds: 12),
+  lib\core\connectivity\internet_status_controller.dart:34:      (_) => unawaited(refresh()),
+  lib\core\connectivity\internet_status_controller.dart:35:    );
+  lib\core\connectivity\internet_status_controller.dart:36:
+  lib\core\connectivity\internet_status_controller.dart:37:    await refresh();
+  lib\core\connectivity\internet_status_controller.dart:38:  }
+  lib\core\connectivity\internet_status_controller.dart:39:
+  lib\core\connectivity\internet_status_controller.dart:40:  Future<void> refresh() async {
+  lib\core\connectivity\internet_status_controller.dart:41:    if (_isChecking || _isDisposed) return;
+  lib\core\connectivity\internet_status_controller.dart:42:    _isChecking = true;
+  lib\core\connectivity\internet_status_controller.dart:43:
+  lib\core\connectivity\internet_status_controller.dart:44:    try {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:35:  List<CourierOrder> _orders = [];
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:36:  bool _loading = true;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:37:  String? _loadError;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:38:  int _selectedIndex = 0;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:39:  int _unreadNotificationCount = 0;
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:40:  Timer? _remoteStateRefreshTimer;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:41:  bool _refreshingRemoteState = false;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:42:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:43:  @override
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:44:  void initState() {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:45:    super.initState();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:46:    WidgetsBinding.instance.addObserver(this);
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:47:    _loadOrders();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:48:    unawaited(_profileController.loadAccountIfNeeded());
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:49:    unawaited(_refreshUnreadNotificationCount());
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:50:    _remoteStateRefreshTimer = Timer.periodic(
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:51:      const Duration(seconds: 3),
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:52:      (_) => unawaited(_refreshRemoteState()),
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:53:    );
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:54:  }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:55:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:56:  @override
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:57:  void dispose() {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:58:    WidgetsBinding.instance.removeObserver(this);
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:59:    _remoteStateRefreshTimer?.cancel();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:60:    _notificationsController.clear();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:61:    _notificationsController.dispose();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:62:    _profileController.dispose();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:63:    super.dispose();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:64:  }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:65:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:66:  @override
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:67:  void didChangeAppLifecycleState(AppLifecycleState state) {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:68:    if (state == AppLifecycleState.resumed) {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:69:      unawaited(_refreshRemoteState());
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:70:    }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:71:  }
+
+
+
+
+=== PROFILE AND COURIER STATUS CALLS ===
+
+  lib\core\auth\auth_session.dart:125:        return AuthRestoreResult.restored;
+  lib\core\auth\auth_session.dart:126:      }
+  lib\core\auth\auth_session.dart:127:      await _expireSession(notify: true);
+  lib\core\auth\auth_session.dart:128:      return AuthRestoreResult.expired;
+  lib\core\auth\auth_session.dart:129:    } on ApiException catch (error) {
+> lib\core\auth\auth_session.dart:130:      if (_isAuthenticationFailure(error.statusCode)) {
+  lib\core\auth\auth_session.dart:131:        final passwordChanged = error.message == _passwordChangedMessage;
+  lib\core\auth\auth_session.dart:132:        if (passwordChanged) _notifyPasswordChanged();
+  lib\core\auth\auth_session.dart:133:        await _expireSession(notify: !passwordChanged);
+  lib\core\auth\auth_session.dart:134:        return AuthRestoreResult.expired;
+  lib\core\auth\auth_session.dart:135:      }
+  lib\core\auth\auth_session.dart:136:      return AuthRestoreResult.temporaryFailure;
+  lib\core\auth\auth_session.dart:137:    } catch (_) {
+  lib\core\auth\auth_session.dart:138:      return AuthRestoreResult.temporaryFailure;
+  lib\core\auth\auth_session.dart:139:    }
+  lib\core\auth\auth_session.dart:140:  }
+  lib\core\auth\auth_session.dart:141:
+  lib\core\auth\auth_session.dart:142:  Future<void> login({
+  lib\core\auth\auth_session.dart:153:        'identifier': cleanIdentifier,
+  lib\core\auth\auth_session.dart:154:        'password': cleanPassword,
+  lib\core\auth\auth_session.dart:155:      }),
+  lib\core\auth\auth_session.dart:156:    );
+  lib\core\auth\auth_session.dart:157:    final data = _decode(response);
+> lib\core\auth\auth_session.dart:158:    if (response.statusCode < 200 || response.statusCode >= 300) {
+  lib\core\auth\auth_session.dart:159:      throw ApiException(
+  lib\core\auth\auth_session.dart:160:        _message(
+  lib\core\auth\auth_session.dart:161:          data,
+  lib\core\auth\auth_session.dart:162:          '\u062a\u0639\u0630\u0631 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644.',
+  lib\core\auth\auth_session.dart:163:        ),
+> lib\core\auth\auth_session.dart:164:        statusCode: response.statusCode,
+  lib\core\auth\auth_session.dart:165:      );
+  lib\core\auth\auth_session.dart:166:    }
+  lib\core\auth\auth_session.dart:167:
+  lib\core\auth\auth_session.dart:168:    final map = data as Map<String, dynamic>;
+  lib\core\auth\auth_session.dart:169:    _accessToken = map['accessToken']?.toString();
+  lib\core\auth\auth_session.dart:170:    _refreshToken = map['refreshToken']?.toString();
+  lib\core\auth\auth_session.dart:171:    currentUser = map['user'] as Map<String, dynamic>?;
+  lib\core\auth\auth_session.dart:172:    if (_accessToken == null ||
+  lib\core\auth\auth_session.dart:173:        _refreshToken == null ||
+  lib\core\auth\auth_session.dart:174:        currentUser?['role'] != 'representative') {
+  lib\core\auth\auth_session.dart:175:      await clear();
+  lib\core\auth\auth_session.dart:176:      throw const ApiException(
+  lib\core\auth\auth_session.dart:204:  }
+  lib\core\auth\auth_session.dart:205:
+  lib\core\auth\auth_session.dart:206:  Future<dynamic> getJson(String path) async {
+  lib\core\auth\auth_session.dart:207:    final response = await _sendWithRefresh<http.Response>(
+  lib\core\auth\auth_session.dart:208:      send: () => _authorizedGet(path),
+> lib\core\auth\auth_session.dart:209:      statusCode: (response) => response.statusCode,
+  lib\core\auth\auth_session.dart:210:    );
+  lib\core\auth\auth_session.dart:211:    final data = _decode(response);
+> lib\core\auth\auth_session.dart:212:    if (response.statusCode < 200 || response.statusCode >= 300) {
+  lib\core\auth\auth_session.dart:213:      throw ApiException(
+  lib\core\auth\auth_session.dart:214:        _message(
+  lib\core\auth\auth_session.dart:215:          data,
+  lib\core\auth\auth_session.dart:216:          '\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a.',
+  lib\core\auth\auth_session.dart:217:        ),
+> lib\core\auth\auth_session.dart:218:        statusCode: response.statusCode,
+  lib\core\auth\auth_session.dart:219:      );
+  lib\core\auth\auth_session.dart:220:    }
+  lib\core\auth\auth_session.dart:221:    return data;
+  lib\core\auth\auth_session.dart:222:  }
+  lib\core\auth\auth_session.dart:223:
+  lib\core\auth\auth_session.dart:224:  Future<dynamic> postJson(String path, Map<String, dynamic> body) async {
+  lib\core\auth\auth_session.dart:225:    final response = await _sendWithRefresh<http.Response>(
+  lib\core\auth\auth_session.dart:226:      send: () => _authorizedPost(path, body),
+> lib\core\auth\auth_session.dart:227:      statusCode: (response) => response.statusCode,
+  lib\core\auth\auth_session.dart:228:    );
+  lib\core\auth\auth_session.dart:229:    final data = _decode(response);
+> lib\core\auth\auth_session.dart:230:    if (response.statusCode < 200 || response.statusCode >= 300) {
+  lib\core\auth\auth_session.dart:231:      throw ApiException(
+  lib\core\auth\auth_session.dart:232:        _message(
+  lib\core\auth\auth_session.dart:233:          data,
+  lib\core\auth\auth_session.dart:234:          '\u062a\u0639\u0630\u0631 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628.',
+  lib\core\auth\auth_session.dart:235:        ),
+> lib\core\auth\auth_session.dart:236:        statusCode: response.statusCode,
+  lib\core\auth\auth_session.dart:237:      );
+  lib\core\auth\auth_session.dart:238:    }
+  lib\core\auth\auth_session.dart:239:    return data;
+  lib\core\auth\auth_session.dart:240:  }
+  lib\core\auth\auth_session.dart:241:
+  lib\core\auth\auth_session.dart:242:  Future<dynamic> patchJson(String path, Map<String, dynamic> body) async {
+  lib\core\auth\auth_session.dart:243:    final response = await _sendWithRefresh<http.Response>(
+  lib\core\auth\auth_session.dart:244:      send: () => _authorizedPatch(path, body),
+> lib\core\auth\auth_session.dart:245:      statusCode: (response) => response.statusCode,
+  lib\core\auth\auth_session.dart:246:    );
+  lib\core\auth\auth_session.dart:247:    final data = _decode(response);
+> lib\core\auth\auth_session.dart:248:    if (response.statusCode < 200 || response.statusCode >= 300) {
+  lib\core\auth\auth_session.dart:249:      throw ApiException(
+  lib\core\auth\auth_session.dart:250:        _message(
+  lib\core\auth\auth_session.dart:251:          data,
+  lib\core\auth\auth_session.dart:252:          '\u062a\u0639\u0630\u0631 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0637\u0644\u0628.',
+  lib\core\auth\auth_session.dart:253:        ),
+> lib\core\auth\auth_session.dart:254:        statusCode: response.statusCode,
+  lib\core\auth\auth_session.dart:255:      );
+  lib\core\auth\auth_session.dart:256:    }
+  lib\core\auth\auth_session.dart:257:    return data;
+  lib\core\auth\auth_session.dart:258:  }
+  lib\core\auth\auth_session.dart:259:
+  lib\core\auth\auth_session.dart:260:  Future<dynamic> deleteJson(String path) async {
+  lib\core\auth\auth_session.dart:261:    final response = await _sendWithRefresh<http.Response>(
+  lib\core\auth\auth_session.dart:262:      send: () => _authorizedDelete(path),
+> lib\core\auth\auth_session.dart:263:      statusCode: (response) => response.statusCode,
+  lib\core\auth\auth_session.dart:264:    );
+  lib\core\auth\auth_session.dart:265:    final data = _decode(response);
+> lib\core\auth\auth_session.dart:266:    if (response.statusCode < 200 || response.statusCode >= 300) {
+  lib\core\auth\auth_session.dart:267:      throw ApiException(
+  lib\core\auth\auth_session.dart:268:        _message(
+  lib\core\auth\auth_session.dart:269:          data,
+  lib\core\auth\auth_session.dart:270:          '\u062a\u0639\u0630\u0631 \u062d\u0630\u0641 \u0627\u0644\u0639\u0646\u0635\u0631.',
+  lib\core\auth\auth_session.dart:271:        ),
+> lib\core\auth\auth_session.dart:272:        statusCode: response.statusCode,
+  lib\core\auth\auth_session.dart:273:      );
+  lib\core\auth\auth_session.dart:274:    }
+  lib\core\auth\auth_session.dart:275:    return data;
+  lib\core\auth\auth_session.dart:276:  }
+  lib\core\auth\auth_session.dart:277:
+  lib\core\auth\auth_session.dart:278:  Future<dynamic> postMultipart(
+  lib\core\auth\auth_session.dart:279:    String path, {
+  lib\core\auth\auth_session.dart:280:    String? note,
+  lib\core\auth\auth_session.dart:281:    List<int>? proofBytes,
+  lib\core\auth\auth_session.dart:282:    String? proofName,
+  lib\core\auth\auth_session.dart:283:  }) async {
+  lib\core\auth\auth_session.dart:284:    Future<http.StreamedResponse> send() async {
+  lib\core\auth\auth_session.dart:299:      return request.send();
+  lib\core\auth\auth_session.dart:300:    }
+  lib\core\auth\auth_session.dart:301:
+  lib\core\auth\auth_session.dart:302:    final streamed = await _sendWithRefresh<http.StreamedResponse>(
+  lib\core\auth\auth_session.dart:303:      send: send,
+> lib\core\auth\auth_session.dart:304:      statusCode: (response) => response.statusCode,
+  lib\core\auth\auth_session.dart:305:    );
+  lib\core\auth\auth_session.dart:306:    final response = await http.Response.fromStream(streamed);
+  lib\core\auth\auth_session.dart:307:    final data = _decode(response);
+> lib\core\auth\auth_session.dart:308:    if (response.statusCode < 200 || response.statusCode >= 300) {
+  lib\core\auth\auth_session.dart:309:      throw ApiException(
+  lib\core\auth\auth_session.dart:310:        _message(
+  lib\core\auth\auth_session.dart:311:          data,
+  lib\core\auth\auth_session.dart:312:          '\u062a\u0639\u0630\u0631 \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u062a\u0633\u0644\u064a\u0645.',
+  lib\core\auth\auth_session.dart:313:        ),
+> lib\core\auth\auth_session.dart:314:        statusCode: response.statusCode,
+  lib\core\auth\auth_session.dart:315:      );
+  lib\core\auth\auth_session.dart:316:    }
+  lib\core\auth\auth_session.dart:317:    return data;
+  lib\core\auth\auth_session.dart:318:  }
+  lib\core\auth\auth_session.dart:319:
+  lib\core\auth\auth_session.dart:320:  Future<void> logout() async {
+  lib\core\auth\auth_session.dart:321:    final refresh = _refreshToken;
+  lib\core\auth\auth_session.dart:322:    if (refresh != null && _accessToken != null) {
+  lib\core\auth\auth_session.dart:323:      try {
+  lib\core\auth\auth_session.dart:324:        await _client.post(
+  lib\core\auth\auth_session.dart:325:          uri('auth/logout/'),
+  lib\core\auth\auth_session.dart:326:          headers: {
+  lib\core\auth\auth_session.dart:355:  }
+  lib\core\auth\auth_session.dart:356:
+  lib\core\auth\auth_session.dart:357:  Future<Map<String, dynamic>> _fetchCurrentUserForRestore() async {
+  lib\core\auth\auth_session.dart:358:    final response = await _authorizedGet('auth/me/');
+  lib\core\auth\auth_session.dart:359:    final data = _decode(response);
+> lib\core\auth\auth_session.dart:360:    if (response.statusCode < 200 || response.statusCode >= 300) {
+  lib\core\auth\auth_session.dart:361:      throw ApiException(
+  lib\core\auth\auth_session.dart:362:        _message(
+  lib\core\auth\auth_session.dart:363:          data,
+  lib\core\auth\auth_session.dart:364:          '\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062d\u0633\u0627\u0628.',
+  lib\core\auth\auth_session.dart:365:        ),
+> lib\core\auth\auth_session.dart:366:        statusCode: response.statusCode,
+  lib\core\auth\auth_session.dart:367:      );
+  lib\core\auth\auth_session.dart:368:    }
+  lib\core\auth\auth_session.dart:369:    if (data is Map<String, dynamic>) return data;
+  lib\core\auth\auth_session.dart:370:    throw const ApiException(
+  lib\core\auth\auth_session.dart:371:      '\u062a\u0639\u0630\u0631 \u0642\u0631\u0627\u0621\u0629 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062d\u0633\u0627\u0628.',
+  lib\core\auth\auth_session.dart:372:    );
+  lib\core\auth\auth_session.dart:373:  }
+  lib\core\auth\auth_session.dart:374:
+  lib\core\auth\auth_session.dart:375:  Future<http.Response> _authorizedGet(String path) {
+  lib\core\auth\auth_session.dart:376:    return _client.get(
+  lib\core\auth\auth_session.dart:377:      uri(path),
+  lib\core\auth\auth_session.dart:378:      headers: {'Authorization': 'Bearer $_accessToken'},
+  lib\core\auth\auth_session.dart:414:    );
+  lib\core\auth\auth_session.dart:415:  }
+  lib\core\auth\auth_session.dart:416:
+  lib\core\auth\auth_session.dart:417:  Future<T> _sendWithRefresh<T>({
+  lib\core\auth\auth_session.dart:418:    required Future<T> Function() send,
+> lib\core\auth\auth_session.dart:419:    required int Function(T response) statusCode,
+  lib\core\auth\auth_session.dart:420:  }) async {
+  lib\core\auth\auth_session.dart:421:    await _ensureSessionStillActive();
+  lib\core\auth\auth_session.dart:422:    var response = await send();
+> lib\core\auth\auth_session.dart:423:    if (statusCode(response) == 401 && await _tryRefresh()) {
+  lib\core\auth\auth_session.dart:424:      response = await send();
+  lib\core\auth\auth_session.dart:425:    }
+  lib\core\auth\auth_session.dart:426:    return response;
+  lib\core\auth\auth_session.dart:427:  }
+  lib\core\auth\auth_session.dart:428:
+  lib\core\auth\auth_session.dart:429:  Future<bool> _tryRefresh() async {
+  lib\core\auth\auth_session.dart:430:    try {
+  lib\core\auth\auth_session.dart:431:      await _refreshOnce();
+  lib\core\auth\auth_session.dart:432:      return _accessToken != null;
+  lib\core\auth\auth_session.dart:433:    } on ApiException catch (error) {
+  lib\core\auth\auth_session.dart:434:      final passwordChanged = error.message == _passwordChangedMessage;
+  lib\core\auth\auth_session.dart:435:      if (passwordChanged) _notifyPasswordChanged();
+  lib\core\auth\auth_session.dart:480:      uri('auth/refresh/'),
+  lib\core\auth\auth_session.dart:481:      headers: const {'Content-Type': 'application/json'},
+  lib\core\auth\auth_session.dart:482:      body: jsonEncode({'refreshToken': refresh}),
+  lib\core\auth\auth_session.dart:483:    );
+  lib\core\auth\auth_session.dart:484:    final data = _decode(response);
+> lib\core\auth\auth_session.dart:485:    if (response.statusCode < 200 || response.statusCode >= 300) {
+  lib\core\auth\auth_session.dart:486:      if (_isPasswordChangedResponse(data)) {
+> lib\core\auth\auth_session.dart:487:        throw const ApiException(_passwordChangedMessage, statusCode: 401);
+  lib\core\auth\auth_session.dart:488:      }
+  lib\core\auth\auth_session.dart:489:      throw ApiException(
+  lib\core\auth\auth_session.dart:490:        _message(
+  lib\core\auth\auth_session.dart:491:          data,
+  lib\core\auth\auth_session.dart:492:          '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
+  lib\core\auth\auth_session.dart:493:        ),
+> lib\core\auth\auth_session.dart:494:        statusCode: response.statusCode,
+  lib\core\auth\auth_session.dart:495:      );
+  lib\core\auth\auth_session.dart:496:    }
+  lib\core\auth\auth_session.dart:497:
+  lib\core\auth\auth_session.dart:498:    if (refreshVersion != _sessionVersion) return;
+  lib\core\auth\auth_session.dart:499:
+  lib\core\auth\auth_session.dart:500:    final map = data as Map<String, dynamic>;
+  lib\core\auth\auth_session.dart:501:    _accessToken = map['accessToken']?.toString();
+  lib\core\auth\auth_session.dart:502:    _refreshToken = map['refreshToken']?.toString() ?? refresh;
+  lib\core\auth\auth_session.dart:503:    if (_rememberSession) {
+  lib\core\auth\auth_session.dart:504:      await _storage.write(key: _refreshKey, value: _refreshToken);
+  lib\core\auth\auth_session.dart:505:    }
+  lib\core\auth\auth_session.dart:506:  }
+  lib\core\auth\auth_session.dart:512:  bool _isSessionExpired() {
+  lib\core\auth\auth_session.dart:513:    final expiresAt = _sessionExpiresAt;
+  lib\core\auth\auth_session.dart:514:    return expiresAt == null || !_isBeforeExpiry(expiresAt);
+  lib\core\auth\auth_session.dart:515:  }
+  lib\core\auth\auth_session.dart:516:
+> lib\core\auth\auth_session.dart:517:  bool _isAuthenticationFailure(int? statusCode) {
+> lib\core\auth\auth_session.dart:518:    return statusCode == 400 || statusCode == 401 || statusCode == 403;
+  lib\core\auth\auth_session.dart:519:  }
+  lib\core\auth\auth_session.dart:520:
+  lib\core\auth\auth_session.dart:521:  Future<void> _clearRememberedStorage() async {
+  lib\core\auth\auth_session.dart:522:    await _storage.delete(key: _refreshKey);
+  lib\core\auth\auth_session.dart:523:    await _storage.delete(key: _rememberKey);
+  lib\core\auth\auth_session.dart:524:    await _storage.delete(key: _expiresAtKey);
+  lib\core\auth\auth_session.dart:525:  }
+  lib\core\auth\auth_session.dart:526:
+  lib\core\auth\auth_session.dart:527:  Future<void> _ensureSessionStillActive() async {
+  lib\core\auth\auth_session.dart:528:    if (!_isSessionExpired()) return;
+  lib\core\auth\auth_session.dart:529:    await _expireSession(notify: true);
+  lib\core\auth\auth_session.dart:530:    throw ApiException(
+  lib\core\connectivity\internet_status_controller.dart:3:import 'package:connectivity_plus/connectivity_plus.dart';
+  lib\core\connectivity\internet_status_controller.dart:4:import 'package:flutter/widgets.dart';
+  lib\core\connectivity\internet_status_controller.dart:5:
+  lib\core\connectivity\internet_status_controller.dart:6:import 'internet_reachability.dart';
+  lib\core\connectivity\internet_status_controller.dart:7:
+> lib\core\connectivity\internet_status_controller.dart:8:class InternetStatusController extends ChangeNotifier {
+> lib\core\connectivity\internet_status_controller.dart:9:  InternetStatusController({Connectivity? connectivity})
+  lib\core\connectivity\internet_status_controller.dart:10:    : _connectivity = connectivity ?? Connectivity();
+  lib\core\connectivity\internet_status_controller.dart:11:
+  lib\core\connectivity\internet_status_controller.dart:12:  final Connectivity _connectivity;
+  lib\core\connectivity\internet_status_controller.dart:13:  StreamSubscription<List<ConnectivityResult>>? _subscription;
+  lib\core\connectivity\internet_status_controller.dart:14:  Timer? _verificationTimer;
+> lib\core\connectivity\internet_status_controller.dart:15:  bool _hasStatus = false;
+  lib\core\connectivity\internet_status_controller.dart:16:  bool _isOffline = false;
+  lib\core\connectivity\internet_status_controller.dart:17:  bool _isChecking = false;
+  lib\core\connectivity\internet_status_controller.dart:18:  bool _started = false;
+  lib\core\connectivity\internet_status_controller.dart:19:  bool _isDisposed = false;
+  lib\core\connectivity\internet_status_controller.dart:20:
+> lib\core\connectivity\internet_status_controller.dart:21:  bool get hasStatus => _hasStatus;
+> lib\core\connectivity\internet_status_controller.dart:22:  bool get isOffline => _hasStatus && _isOffline;
+  lib\core\connectivity\internet_status_controller.dart:23:
+  lib\core\connectivity\internet_status_controller.dart:24:  Future<void> start() async {
+  lib\core\connectivity\internet_status_controller.dart:25:    if (_started) return;
+  lib\core\connectivity\internet_status_controller.dart:26:    _started = true;
+  lib\core\connectivity\internet_status_controller.dart:27:
+  lib\core\connectivity\internet_status_controller.dart:28:    _subscription = _connectivity.onConnectivityChanged.listen(
+  lib\core\connectivity\internet_status_controller.dart:29:      (result) => unawaited(_updateFromConnectivity(result)),
+> lib\core\connectivity\internet_status_controller.dart:30:      onError: (_) => _setStatus(isOffline: false),
+  lib\core\connectivity\internet_status_controller.dart:31:    );
+  lib\core\connectivity\internet_status_controller.dart:32:    _verificationTimer = Timer.periodic(
+  lib\core\connectivity\internet_status_controller.dart:33:      const Duration(seconds: 12),
+  lib\core\connectivity\internet_status_controller.dart:34:      (_) => unawaited(refresh()),
+  lib\core\connectivity\internet_status_controller.dart:35:    );
+  lib\core\connectivity\internet_status_controller.dart:36:
+  lib\core\connectivity\internet_status_controller.dart:37:    await refresh();
+  lib\core\connectivity\internet_status_controller.dart:38:  }
+  lib\core\connectivity\internet_status_controller.dart:39:
+  lib\core\connectivity\internet_status_controller.dart:40:  Future<void> refresh() async {
+  lib\core\connectivity\internet_status_controller.dart:41:    if (_isChecking || _isDisposed) return;
+  lib\core\connectivity\internet_status_controller.dart:42:    _isChecking = true;
+  lib\core\connectivity\internet_status_controller.dart:43:
+  lib\core\connectivity\internet_status_controller.dart:44:    try {
+  lib\core\connectivity\internet_status_controller.dart:45:      final result = await _connectivity.checkConnectivity();
+  lib\core\connectivity\internet_status_controller.dart:46:      await _updateFromConnectivity(result);
+  lib\core\connectivity\internet_status_controller.dart:47:    } catch (_) {
+> lib\core\connectivity\internet_status_controller.dart:48:      _setStatus(isOffline: false);
+  lib\core\connectivity\internet_status_controller.dart:49:    } finally {
+  lib\core\connectivity\internet_status_controller.dart:50:      _isChecking = false;
+  lib\core\connectivity\internet_status_controller.dart:51:    }
+  lib\core\connectivity\internet_status_controller.dart:52:  }
+  lib\core\connectivity\internet_status_controller.dart:53:
+  lib\core\connectivity\internet_status_controller.dart:54:  Future<void> _updateFromConnectivity(List<ConnectivityResult> result) async {
+  lib\core\connectivity\internet_status_controller.dart:55:    if (_isDisposed) return;
+  lib\core\connectivity\internet_status_controller.dart:56:
+  lib\core\connectivity\internet_status_controller.dart:57:    final hasNetwork =
+  lib\core\connectivity\internet_status_controller.dart:58:        result.isNotEmpty &&
+  lib\core\connectivity\internet_status_controller.dart:59:        result.any((connection) => connection != ConnectivityResult.none);
+  lib\core\connectivity\internet_status_controller.dart:60:
+  lib\core\connectivity\internet_status_controller.dart:61:    if (!hasNetwork) {
+> lib\core\connectivity\internet_status_controller.dart:62:      _setStatus(isOffline: true);
+  lib\core\connectivity\internet_status_controller.dart:63:      return;
+  lib\core\connectivity\internet_status_controller.dart:64:    }
+  lib\core\connectivity\internet_status_controller.dart:65:
+  lib\core\connectivity\internet_status_controller.dart:66:    final canReachInternet = await hasInternetAccess();
+  lib\core\connectivity\internet_status_controller.dart:67:    if (_isDisposed) return;
+  lib\core\connectivity\internet_status_controller.dart:68:
+> lib\core\connectivity\internet_status_controller.dart:69:    _setStatus(isOffline: canReachInternet == false);
+  lib\core\connectivity\internet_status_controller.dart:70:  }
+  lib\core\connectivity\internet_status_controller.dart:71:
+> lib\core\connectivity\internet_status_controller.dart:72:  void _setStatus({required bool isOffline}) {
+  lib\core\connectivity\internet_status_controller.dart:73:    if (_isDisposed) return;
+> lib\core\connectivity\internet_status_controller.dart:74:    if (_hasStatus && _isOffline == isOffline) return;
+  lib\core\connectivity\internet_status_controller.dart:75:
+> lib\core\connectivity\internet_status_controller.dart:76:    _hasStatus = true;
+  lib\core\connectivity\internet_status_controller.dart:77:    _isOffline = isOffline;
+  lib\core\connectivity\internet_status_controller.dart:78:    notifyListeners();
+  lib\core\connectivity\internet_status_controller.dart:79:  }
+  lib\core\connectivity\internet_status_controller.dart:80:
+  lib\core\connectivity\internet_status_controller.dart:81:  @override
+  lib\core\connectivity\internet_status_controller.dart:82:  void dispose() {
+  lib\core\connectivity\internet_status_controller.dart:83:    _isDisposed = true;
+  lib\core\connectivity\internet_status_controller.dart:84:    _subscription?.cancel();
+  lib\core\connectivity\internet_status_controller.dart:85:    _verificationTimer?.cancel();
+  lib\core\connectivity\internet_status_controller.dart:86:    super.dispose();
+  lib\core\connectivity\internet_status_controller.dart:87:  }
+  lib\core\connectivity\internet_status_controller.dart:88:}
+  lib\core\connectivity\internet_status_controller.dart:89:
+> lib\core\connectivity\internet_status_controller.dart:90:class InternetStatusScope extends InheritedNotifier<InternetStatusController> {
+> lib\core\connectivity\internet_status_controller.dart:91:  const InternetStatusScope({
+  lib\core\connectivity\internet_status_controller.dart:92:    super.key,
+> lib\core\connectivity\internet_status_controller.dart:93:    required InternetStatusController controller,
+  lib\core\connectivity\internet_status_controller.dart:94:    required super.child,
+  lib\core\connectivity\internet_status_controller.dart:95:  }) : super(notifier: controller);
+  lib\core\connectivity\internet_status_controller.dart:96:
+> lib\core\connectivity\internet_status_controller.dart:97:  static InternetStatusController? maybeOf(BuildContext context) {
+  lib\core\connectivity\internet_status_controller.dart:98:    return context
+> lib\core\connectivity\internet_status_controller.dart:99:        .dependOnInheritedWidgetOfExactType<InternetStatusScope>()
+  lib\core\connectivity\internet_status_controller.dart:100:        ?.notifier;
+  lib\core\connectivity\internet_status_controller.dart:101:  }
+  lib\core\connectivity\internet_status_controller.dart:102:}
+  lib\core\network\api_exception.dart:1:class ApiException implements Exception {
+> lib\core\network\api_exception.dart:2:  const ApiException(this.message, {this.statusCode});
+  lib\core\network\api_exception.dart:3:
+  lib\core\network\api_exception.dart:4:  final String message;
+> lib\core\network\api_exception.dart:5:  final int? statusCode;
+  lib\core\network\api_exception.dart:6:
+  lib\core\network\api_exception.dart:7:  @override
+  lib\core\network\api_exception.dart:8:  String toString() => message;
+  lib\core\network\api_exception.dart:9:}
+  lib\core\presentation\widgets\offline_connection_banner.dart:1:import 'dart:async';
+  lib\core\presentation\widgets\offline_connection_banner.dart:2:
+  lib\core\presentation\widgets\offline_connection_banner.dart:3:import 'package:flutter/material.dart';
+  lib\core\presentation\widgets\offline_connection_banner.dart:4:
+  lib\core\presentation\widgets\offline_connection_banner.dart:5:import '../../constants/app_colors.dart';
+> lib\core\presentation\widgets\offline_connection_banner.dart:6:import '../../connectivity/internet_status_controller.dart';
+  lib\core\presentation\widgets\offline_connection_banner.dart:7:
+  lib\core\presentation\widgets\offline_connection_banner.dart:8:class OfflineConnectionBanner extends StatefulWidget {
+  lib\core\presentation\widgets\offline_connection_banner.dart:9:  const OfflineConnectionBanner({super.key, required this.child});
+  lib\core\presentation\widgets\offline_connection_banner.dart:10:
+  lib\core\presentation\widgets\offline_connection_banner.dart:11:  final Widget child;
+  lib\core\presentation\widgets\offline_connection_banner.dart:12:
+  lib\core\presentation\widgets\offline_connection_banner.dart:13:  @override
+  lib\core\presentation\widgets\offline_connection_banner.dart:14:  State<OfflineConnectionBanner> createState() =>
+  lib\core\presentation\widgets\offline_connection_banner.dart:15:      _OfflineConnectionBannerState();
+  lib\core\presentation\widgets\offline_connection_banner.dart:16:}
+  lib\core\presentation\widgets\offline_connection_banner.dart:17:
+  lib\core\presentation\widgets\offline_connection_banner.dart:18:class _OfflineConnectionBannerState extends State<OfflineConnectionBanner> {
+> lib\core\presentation\widgets\offline_connection_banner.dart:19:  late final InternetStatusController _internetStatusController;
+  lib\core\presentation\widgets\offline_connection_banner.dart:20:
+  lib\core\presentation\widgets\offline_connection_banner.dart:21:  @override
+  lib\core\presentation\widgets\offline_connection_banner.dart:22:  void initState() {
+  lib\core\presentation\widgets\offline_connection_banner.dart:23:    super.initState();
+> lib\core\presentation\widgets\offline_connection_banner.dart:24:    _internetStatusController = InternetStatusController();
+> lib\core\presentation\widgets\offline_connection_banner.dart:25:    unawaited(_internetStatusController.start());
+  lib\core\presentation\widgets\offline_connection_banner.dart:26:  }
+  lib\core\presentation\widgets\offline_connection_banner.dart:27:
+  lib\core\presentation\widgets\offline_connection_banner.dart:28:  @override
+  lib\core\presentation\widgets\offline_connection_banner.dart:29:  void dispose() {
+> lib\core\presentation\widgets\offline_connection_banner.dart:30:    _internetStatusController.dispose();
+  lib\core\presentation\widgets\offline_connection_banner.dart:31:    super.dispose();
+  lib\core\presentation\widgets\offline_connection_banner.dart:32:  }
+  lib\core\presentation\widgets\offline_connection_banner.dart:33:
+  lib\core\presentation\widgets\offline_connection_banner.dart:34:  @override
+  lib\core\presentation\widgets\offline_connection_banner.dart:35:  Widget build(BuildContext context) {
+> lib\core\presentation\widgets\offline_connection_banner.dart:36:    return InternetStatusScope(
+> lib\core\presentation\widgets\offline_connection_banner.dart:37:      controller: _internetStatusController,
+  lib\core\presentation\widgets\offline_connection_banner.dart:38:      child: AnimatedBuilder(
+> lib\core\presentation\widgets\offline_connection_banner.dart:39:        animation: _internetStatusController,
+  lib\core\presentation\widgets\offline_connection_banner.dart:40:        builder: (context, _) {
+> lib\core\presentation\widgets\offline_connection_banner.dart:41:          final isOffline = _internetStatusController.isOffline;
+  lib\core\presentation\widgets\offline_connection_banner.dart:42:
+  lib\core\presentation\widgets\offline_connection_banner.dart:43:          return Stack(
+  lib\core\presentation\widgets\offline_connection_banner.dart:44:            children: [
+  lib\core\presentation\widgets\offline_connection_banner.dart:45:              widget.child,
+  lib\core\presentation\widgets\offline_connection_banner.dart:46:              Positioned(
+  lib\core\presentation\widgets\offline_connection_banner.dart:47:                top: 0,
+  lib\core\presentation\widgets\offline_connection_banner.dart:48:                left: 0,
+  lib\core\presentation\widgets\offline_connection_banner.dart:49:                right: 0,
+  lib\core\presentation\widgets\offline_connection_banner.dart:50:                child: SafeArea(
+  lib\core\presentation\widgets\offline_connection_banner.dart:51:                  bottom: false,
+  lib\core\presentation\widgets\offline_connection_banner.dart:52:                  child: IgnorePointer(
+  lib\core\presentation\widgets\offline_connection_banner.dart:53:                    ignoring: !isOffline,
+  lib\features\deliveries\data\courier_orders_api.dart:18:    return CourierOrder.fromJson(data as Map<String, dynamic>);
+  lib\features\deliveries\data\courier_orders_api.dart:19:  }
+  lib\features\deliveries\data\courier_orders_api.dart:20:
+  lib\features\deliveries\data\courier_orders_api.dart:21:  Future<CourierOrder> markPickedUp(String orderId) async {
+  lib\features\deliveries\data\courier_orders_api.dart:22:    final data = await AuthSession.instance.patchJson(
+> lib\features\deliveries\data\courier_orders_api.dart:23:      'courier/orders/$orderId/status/',
+> lib\features\deliveries\data\courier_orders_api.dart:24:      {'status': 'picked_up'},
+  lib\features\deliveries\data\courier_orders_api.dart:25:    );
+  lib\features\deliveries\data\courier_orders_api.dart:26:    return CourierOrder.fromJson(data as Map<String, dynamic>);
+  lib\features\deliveries\data\courier_orders_api.dart:27:  }
+  lib\features\deliveries\data\courier_orders_api.dart:28:
+  lib\features\deliveries\data\courier_orders_api.dart:29:  Future<CourierOrder> markDelivered(String orderId, {String? note}) async {
+  lib\features\deliveries\data\courier_orders_api.dart:30:    final deliveryNote = note?.trim();
+  lib\features\deliveries\data\courier_orders_api.dart:31:    final data = await AuthSession.instance
+> lib\features\deliveries\data\courier_orders_api.dart:32:        .patchJson('courier/orders/$orderId/status/', {
+> lib\features\deliveries\data\courier_orders_api.dart:33:          'status': 'delivered',
+  lib\features\deliveries\data\courier_orders_api.dart:34:          if (deliveryNote != null && deliveryNote.isNotEmpty)
+  lib\features\deliveries\data\courier_orders_api.dart:35:            'delivery_note': deliveryNote,
+  lib\features\deliveries\data\courier_orders_api.dart:36:        });
+  lib\features\deliveries\data\courier_orders_api.dart:37:    return CourierOrder.fromJson(data as Map<String, dynamic>);
+  lib\features\deliveries\data\courier_orders_api.dart:38:  }
+  lib\features\deliveries\data\courier_orders_api.dart:39:}
+  lib\features\deliveries\data\courier_profile_api.dart:1:import '../../../core/auth/auth_session.dart';
+  lib\features\deliveries\data\courier_profile_api.dart:2:import '../../../core/network/api_exception.dart';
+  lib\features\deliveries\data\courier_profile_api.dart:3:import '../domain/courier_account.dart';
+  lib\features\deliveries\data\courier_profile_api.dart:4:
+> lib\features\deliveries\data\courier_profile_api.dart:5:class CourierProfileApi {
+> lib\features\deliveries\data\courier_profile_api.dart:6:  const CourierProfileApi();
+  lib\features\deliveries\data\courier_profile_api.dart:7:
+  lib\features\deliveries\data\courier_profile_api.dart:8:  Future<CourierAccount> loadAccount() async {
+  lib\features\deliveries\data\courier_profile_api.dart:9:    final data = await AuthSession.instance.getJson('auth/me/');
+  lib\features\deliveries\data\courier_profile_api.dart:10:    final user = parseUserResponse(data);
+  lib\features\deliveries\data\courier_profile_api.dart:11:    AuthSession.instance.currentUser = user.raw;
+  lib\features\deliveries\data\courier_profile_api.dart:12:    return user;
+  lib\features\deliveries\data\courier_profile_api.dart:13:  }
+  lib\features\deliveries\data\courier_profile_api.dart:14:
+  lib\features\deliveries\data\courier_profile_api.dart:15:  static CourierAccount parseUserResponse(dynamic data) {
+  lib\features\deliveries\data\courier_profile_api.dart:16:    if (data is! Map<String, dynamic>) {
+  lib\features\deliveries\data\courier_profile_api.dart:17:      throw const ApiException('تعذر قراءة بيانات حساب المندوب.');
+  lib\features\deliveries\data\courier_profile_api.dart:18:    }
+  lib\features\deliveries\domain\courier_account.dart:17:  final String? lastName;
+  lib\features\deliveries\domain\courier_account.dart:18:  final String? username;
+  lib\features\deliveries\domain\courier_account.dart:19:  final String? phone;
+  lib\features\deliveries\domain\courier_account.dart:20:  final String? email;
+  lib\features\deliveries\domain\courier_account.dart:21:  final String? avatarUrl;
+> lib\features\deliveries\domain\courier_account.dart:22:  final CourierProfile? profile;
+  lib\features\deliveries\domain\courier_account.dart:23:
+  lib\features\deliveries\domain\courier_account.dart:24:  String get displayName {
+  lib\features\deliveries\domain\courier_account.dart:25:    final name = [firstName, lastName]
+  lib\features\deliveries\domain\courier_account.dart:26:        .whereType<String>()
+  lib\features\deliveries\domain\courier_account.dart:27:        .map((value) => value.trim())
+  lib\features\deliveries\domain\courier_account.dart:28:        .where((value) => value.isNotEmpty)
+  lib\features\deliveries\domain\courier_account.dart:29:        .join(' ');
+  lib\features\deliveries\domain\courier_account.dart:30:    if (name.isNotEmpty) return name;
+  lib\features\deliveries\domain\courier_account.dart:31:    return username?.trim().isNotEmpty == true
+  lib\features\deliveries\domain\courier_account.dart:32:        ? username!.trim()
+  lib\features\deliveries\domain\courier_account.dart:33:        : 'مندوب Yalla Home';
+  lib\features\deliveries\domain\courier_account.dart:34:  }
+  lib\features\deliveries\domain\courier_account.dart:55:      username: _string(json['username']),
+  lib\features\deliveries\domain\courier_account.dart:56:      phone: _string(json['phone']),
+  lib\features\deliveries\domain\courier_account.dart:57:      email: _string(json['email']),
+  lib\features\deliveries\domain\courier_account.dart:58:      avatarUrl: _string(json['avatar_url']),
+  lib\features\deliveries\domain\courier_account.dart:59:      profile: profileJson is Map<String, dynamic>
+> lib\features\deliveries\domain\courier_account.dart:60:          ? CourierProfile.fromJson(profileJson)
+  lib\features\deliveries\domain\courier_account.dart:61:          : null,
+  lib\features\deliveries\domain\courier_account.dart:62:    );
+  lib\features\deliveries\domain\courier_account.dart:63:  }
+  lib\features\deliveries\domain\courier_account.dart:64:}
+  lib\features\deliveries\domain\courier_account.dart:65:
+> lib\features\deliveries\domain\courier_account.dart:66:class CourierProfile {
+> lib\features\deliveries\domain\courier_account.dart:67:  const CourierProfile({
+  lib\features\deliveries\domain\courier_account.dart:68:    this.vehicleType,
+  lib\features\deliveries\domain\courier_account.dart:69:    this.plateNumber,
+  lib\features\deliveries\domain\courier_account.dart:70:    this.serviceCity,
+  lib\features\deliveries\domain\courier_account.dart:71:    this.serviceCityName,
+  lib\features\deliveries\domain\courier_account.dart:72:    this.maxActiveOrders,
+> lib\features\deliveries\domain\courier_account.dart:73:    this.isAvailable,
+  lib\features\deliveries\domain\courier_account.dart:74:  });
+  lib\features\deliveries\domain\courier_account.dart:75:
+  lib\features\deliveries\domain\courier_account.dart:76:  final String? vehicleType;
+  lib\features\deliveries\domain\courier_account.dart:77:  final String? plateNumber;
+  lib\features\deliveries\domain\courier_account.dart:78:  final Object? serviceCity;
+  lib\features\deliveries\domain\courier_account.dart:79:  final String? serviceCityName;
+  lib\features\deliveries\domain\courier_account.dart:80:  final int? maxActiveOrders;
+> lib\features\deliveries\domain\courier_account.dart:81:  final bool? isAvailable;
+  lib\features\deliveries\domain\courier_account.dart:82:
+  lib\features\deliveries\domain\courier_account.dart:83:  String get serviceCityLabel {
+  lib\features\deliveries\domain\courier_account.dart:84:    final value = serviceCityName?.trim();
+  lib\features\deliveries\domain\courier_account.dart:85:    return value == null || value.isEmpty ? 'مدينة الخدمة غير محددة' : value;
+  lib\features\deliveries\domain\courier_account.dart:86:  }
+  lib\features\deliveries\domain\courier_account.dart:87:
+  lib\features\deliveries\domain\courier_account.dart:88:  String get availabilityLabel {
+> lib\features\deliveries\domain\courier_account.dart:89:    return switch (isAvailable) {
+  lib\features\deliveries\domain\courier_account.dart:90:      true => 'متاح لاستقبال الطلبات',
+  lib\features\deliveries\domain\courier_account.dart:91:      false => 'غير متاح حاليًا',
+  lib\features\deliveries\domain\courier_account.dart:92:      null => 'الحالة غير معروفة',
+  lib\features\deliveries\domain\courier_account.dart:93:    };
+  lib\features\deliveries\domain\courier_account.dart:94:  }
+  lib\features\deliveries\domain\courier_account.dart:95:
+  lib\features\deliveries\domain\courier_account.dart:96:  String get vehicleTypeLabel {
+  lib\features\deliveries\domain\courier_account.dart:97:    final value = vehicleType?.trim();
+  lib\features\deliveries\domain\courier_account.dart:98:    return value == null || value.isEmpty ? 'غير محدد' : value;
+  lib\features\deliveries\domain\courier_account.dart:99:  }
+  lib\features\deliveries\domain\courier_account.dart:100:
+  lib\features\deliveries\domain\courier_account.dart:101:  String get plateNumberLabel {
+  lib\features\deliveries\domain\courier_account.dart:106:  String get maxActiveOrdersLabel {
+  lib\features\deliveries\domain\courier_account.dart:107:    final value = maxActiveOrders;
+  lib\features\deliveries\domain\courier_account.dart:108:    return value == null ? 'غير محدد' : '$value';
+  lib\features\deliveries\domain\courier_account.dart:109:  }
+  lib\features\deliveries\domain\courier_account.dart:110:
+> lib\features\deliveries\domain\courier_account.dart:111:  factory CourierProfile.fromJson(Map<String, dynamic> json) {
+> lib\features\deliveries\domain\courier_account.dart:112:    return CourierProfile(
+  lib\features\deliveries\domain\courier_account.dart:113:      vehicleType: _string(json['vehicle_type']),
+  lib\features\deliveries\domain\courier_account.dart:114:      plateNumber: _string(json['plate_number']),
+  lib\features\deliveries\domain\courier_account.dart:115:      serviceCity: json['service_city'],
+  lib\features\deliveries\domain\courier_account.dart:116:      serviceCityName: _string(json['service_city_name']),
+  lib\features\deliveries\domain\courier_account.dart:117:      maxActiveOrders: _int(json['max_active_orders']),
+> lib\features\deliveries\domain\courier_account.dart:118:      isAvailable: json['is_available'] is bool
+> lib\features\deliveries\domain\courier_account.dart:119:          ? json['is_available'] as bool
+  lib\features\deliveries\domain\courier_account.dart:120:          : null,
+  lib\features\deliveries\domain\courier_account.dart:121:    );
+  lib\features\deliveries\domain\courier_account.dart:122:  }
+  lib\features\deliveries\domain\courier_account.dart:123:}
+  lib\features\deliveries\domain\courier_account.dart:124:
+  lib\features\deliveries\domain\courier_account.dart:125:String? _string(Object? value) {
+  lib\features\deliveries\domain\courier_account.dart:126:  final text = value?.toString().trim();
+  lib\features\deliveries\domain\courier_account.dart:127:  return text == null || text.isEmpty ? null : text;
+  lib\features\deliveries\domain\courier_account.dart:128:}
+  lib\features\deliveries\domain\courier_account.dart:129:
+  lib\features\deliveries\domain\courier_account.dart:130:int? _int(Object? value) {
+  lib\features\deliveries\domain\courier_account.dart:131:  if (value is int) return value;
+  lib\features\deliveries\domain\courier_order.dart:3:import 'package:flutter/material.dart';
+  lib\features\deliveries\domain\courier_order.dart:4:
+  lib\features\deliveries\domain\courier_order.dart:5:import '../../../core/auth/auth_session.dart';
+  lib\features\deliveries\domain\courier_order.dart:6:import '../../../core/constants/app_colors.dart';
+  lib\features\deliveries\domain\courier_order.dart:7:
+> lib\features\deliveries\domain\courier_order.dart:8:enum CourierOrderStatus {
+  lib\features\deliveries\domain\courier_order.dart:9:  pending,
+  lib\features\deliveries\domain\courier_order.dart:10:  confirmed,
+  lib\features\deliveries\domain\courier_order.dart:11:  assigned,
+  lib\features\deliveries\domain\courier_order.dart:12:  pickedUp,
+  lib\features\deliveries\domain\courier_order.dart:13:  delivered,
+  lib\features\deliveries\domain\courier_order.dart:14:  failedDelivery,
+  lib\features\deliveries\domain\courier_order.dart:15:  cancelled,
+  lib\features\deliveries\domain\courier_order.dart:16:  unknown,
+  lib\features\deliveries\domain\courier_order.dart:17:}
+  lib\features\deliveries\domain\courier_order.dart:18:
+> lib\features\deliveries\domain\courier_order.dart:19:extension CourierOrderStatusLabel on CourierOrderStatus {
+  lib\features\deliveries\domain\courier_order.dart:20:  String get label {
+  lib\features\deliveries\domain\courier_order.dart:21:    return switch (this) {
+> lib\features\deliveries\domain\courier_order.dart:22:      CourierOrderStatus.pending => 'قيد الانتظار',
+> lib\features\deliveries\domain\courier_order.dart:23:      CourierOrderStatus.confirmed => 'مؤكد',
+> lib\features\deliveries\domain\courier_order.dart:24:      CourierOrderStatus.assigned => 'مطلوب الاستلام',
+> lib\features\deliveries\domain\courier_order.dart:25:      CourierOrderStatus.pickedUp => 'تم الاستلام',
+> lib\features\deliveries\domain\courier_order.dart:26:      CourierOrderStatus.delivered => 'تم التسليم',
+> lib\features\deliveries\domain\courier_order.dart:27:      CourierOrderStatus.failedDelivery => 'تعذر التوصيل',
+> lib\features\deliveries\domain\courier_order.dart:28:      CourierOrderStatus.cancelled => 'ملغي',
+> lib\features\deliveries\domain\courier_order.dart:29:      CourierOrderStatus.unknown => 'حالة غير معروفة',
+  lib\features\deliveries\domain\courier_order.dart:30:    };
+  lib\features\deliveries\domain\courier_order.dart:31:  }
+  lib\features\deliveries\domain\courier_order.dart:32:
+  lib\features\deliveries\domain\courier_order.dart:33:  Color get color {
+  lib\features\deliveries\domain\courier_order.dart:34:    return switch (this) {
+> lib\features\deliveries\domain\courier_order.dart:35:      CourierOrderStatus.pending => AppColors.warning,
+> lib\features\deliveries\domain\courier_order.dart:36:      CourierOrderStatus.confirmed => AppColors.info,
+> lib\features\deliveries\domain\courier_order.dart:37:      CourierOrderStatus.assigned => AppColors.info,
+> lib\features\deliveries\domain\courier_order.dart:38:      CourierOrderStatus.pickedUp => AppColors.primary,
+> lib\features\deliveries\domain\courier_order.dart:39:      CourierOrderStatus.delivered => AppColors.success,
+> lib\features\deliveries\domain\courier_order.dart:40:      CourierOrderStatus.failedDelivery => AppColors.error,
+> lib\features\deliveries\domain\courier_order.dart:41:      CourierOrderStatus.cancelled => AppColors.error,
+> lib\features\deliveries\domain\courier_order.dart:42:      CourierOrderStatus.unknown => AppColors.lightTextSecondary,
+  lib\features\deliveries\domain\courier_order.dart:43:    };
+  lib\features\deliveries\domain\courier_order.dart:44:  }
+  lib\features\deliveries\domain\courier_order.dart:45:
+  lib\features\deliveries\domain\courier_order.dart:46:  bool get isTerminal {
+  lib\features\deliveries\domain\courier_order.dart:47:    return switch (this) {
+> lib\features\deliveries\domain\courier_order.dart:48:      CourierOrderStatus.delivered ||
+> lib\features\deliveries\domain\courier_order.dart:49:      CourierOrderStatus.failedDelivery ||
+> lib\features\deliveries\domain\courier_order.dart:50:      CourierOrderStatus.cancelled => true,
+  lib\features\deliveries\domain\courier_order.dart:51:      _ => false,
+  lib\features\deliveries\domain\courier_order.dart:52:    };
+  lib\features\deliveries\domain\courier_order.dart:53:  }
+  lib\features\deliveries\domain\courier_order.dart:54:
+> lib\features\deliveries\domain\courier_order.dart:55:  bool get isActiveCourierOrder {
+> lib\features\deliveries\domain\courier_order.dart:56:    return this == CourierOrderStatus.assigned ||
+> lib\features\deliveries\domain\courier_order.dart:57:        this == CourierOrderStatus.pickedUp;
+  lib\features\deliveries\domain\courier_order.dart:58:  }
+  lib\features\deliveries\domain\courier_order.dart:59:
+> lib\features\deliveries\domain\courier_order.dart:60:  bool get requiresPickup => this == CourierOrderStatus.assigned;
+  lib\features\deliveries\domain\courier_order.dart:61:
+> lib\features\deliveries\domain\courier_order.dart:62:  bool get canMarkPickedUp => this == CourierOrderStatus.assigned;
+  lib\features\deliveries\domain\courier_order.dart:63:
+> lib\features\deliveries\domain\courier_order.dart:64:  bool get canMarkDelivered => this == CourierOrderStatus.pickedUp;
+  lib\features\deliveries\domain\courier_order.dart:65:
+> lib\features\deliveries\domain\courier_order.dart:66:  bool get isDelivered => this == CourierOrderStatus.delivered;
+  lib\features\deliveries\domain\courier_order.dart:67:}
+  lib\features\deliveries\domain\courier_order.dart:68:
+> lib\features\deliveries\domain\courier_order.dart:69:CourierOrderStatus courierOrderStatusFromRaw(Object? value) {
+  lib\features\deliveries\domain\courier_order.dart:70:  return switch (value?.toString().trim().toLowerCase()) {
+> lib\features\deliveries\domain\courier_order.dart:71:    'pending' => CourierOrderStatus.pending,
+> lib\features\deliveries\domain\courier_order.dart:72:    'confirmed' => CourierOrderStatus.confirmed,
+> lib\features\deliveries\domain\courier_order.dart:73:    'assigned' => CourierOrderStatus.assigned,
+> lib\features\deliveries\domain\courier_order.dart:74:    'under_preparation' || 'preparing' => CourierOrderStatus.confirmed,
+> lib\features\deliveries\domain\courier_order.dart:75:    'ready' => CourierOrderStatus.assigned,
+> lib\features\deliveries\domain\courier_order.dart:76:    'picked_up' => CourierOrderStatus.pickedUp,
+> lib\features\deliveries\domain\courier_order.dart:77:    'on_the_way' => CourierOrderStatus.pickedUp,
+> lib\features\deliveries\domain\courier_order.dart:78:    'delivered' || 'completed' => CourierOrderStatus.delivered,
+> lib\features\deliveries\domain\courier_order.dart:79:    'failed_delivery' => CourierOrderStatus.failedDelivery,
+> lib\features\deliveries\domain\courier_order.dart:80:    'cancelled' || 'canceled' || 'rejected' => CourierOrderStatus.cancelled,
+> lib\features\deliveries\domain\courier_order.dart:81:    _ => CourierOrderStatus.unknown,
+  lib\features\deliveries\domain\courier_order.dart:82:  };
+  lib\features\deliveries\domain\courier_order.dart:83:}
+  lib\features\deliveries\domain\courier_order.dart:84:
+  lib\features\deliveries\domain\courier_order.dart:85:class DeliveryProof {
+  lib\features\deliveries\domain\courier_order.dart:86:  const DeliveryProof({required this.fileName, required this.bytes});
+  lib\features\deliveries\domain\courier_order.dart:87:
+  lib\features\deliveries\domain\courier_order.dart:88:  final String fileName;
+  lib\features\deliveries\domain\courier_order.dart:89:  final Uint8List bytes;
+  lib\features\deliveries\domain\courier_order.dart:90:}
+  lib\features\deliveries\domain\courier_order.dart:91:
+  lib\features\deliveries\domain\courier_order.dart:92:class OrderLocation {
+  lib\features\deliveries\domain\courier_order.dart:93:  const OrderLocation({required this.latitude, required this.longitude});
+  lib\features\deliveries\domain\courier_order.dart:119:    required this.phone,
+  lib\features\deliveries\domain\courier_order.dart:120:    required this.address,
+  lib\features\deliveries\domain\courier_order.dart:121:    required this.area,
+  lib\features\deliveries\domain\courier_order.dart:122:    required this.total,
+  lib\features\deliveries\domain\courier_order.dart:123:    required this.deliveryPrice,
+> lib\features\deliveries\domain\courier_order.dart:124:    required this.status,
+> lib\features\deliveries\domain\courier_order.dart:125:    required this.rawStatus,
+  lib\features\deliveries\domain\courier_order.dart:126:    required this.createdAt,
+  lib\features\deliveries\domain\courier_order.dart:127:    required this.expectedDeliveryAt,
+  lib\features\deliveries\domain\courier_order.dart:128:    required this.items,
+  lib\features\deliveries\domain\courier_order.dart:129:    required this.itemsCount,
+  lib\features\deliveries\domain\courier_order.dart:130:    required this.marketName,
+  lib\features\deliveries\domain\courier_order.dart:131:    required this.marketBranch,
+  lib\features\deliveries\domain\courier_order.dart:132:    required this.marketCount,
+  lib\features\deliveries\domain\courier_order.dart:133:    required this.marketSummary,
+  lib\features\deliveries\domain\courier_order.dart:134:    this.addressLabel,
+  lib\features\deliveries\domain\courier_order.dart:135:    this.serviceCityName,
+  lib\features\deliveries\domain\courier_order.dart:136:    this.deliveryAreaName,
+  lib\features\deliveries\domain\courier_order.dart:137:    this.customerAvatarUrl,
+  lib\features\deliveries\domain\courier_order.dart:149:  final String phone;
+  lib\features\deliveries\domain\courier_order.dart:150:  final String address;
+  lib\features\deliveries\domain\courier_order.dart:151:  final String area;
+  lib\features\deliveries\domain\courier_order.dart:152:  final double total;
+  lib\features\deliveries\domain\courier_order.dart:153:  final double? deliveryPrice;
+> lib\features\deliveries\domain\courier_order.dart:154:  final CourierOrderStatus status;
+> lib\features\deliveries\domain\courier_order.dart:155:  final String rawStatus;
+  lib\features\deliveries\domain\courier_order.dart:156:  final DateTime createdAt;
+  lib\features\deliveries\domain\courier_order.dart:157:  final DateTime expectedDeliveryAt;
+  lib\features\deliveries\domain\courier_order.dart:158:  final List<CourierOrderItem> items;
+  lib\features\deliveries\domain\courier_order.dart:159:  final int itemsCount;
+  lib\features\deliveries\domain\courier_order.dart:160:  final String marketName;
+  lib\features\deliveries\domain\courier_order.dart:161:  final String marketBranch;
+  lib\features\deliveries\domain\courier_order.dart:162:  final int marketCount;
+  lib\features\deliveries\domain\courier_order.dart:163:  final String marketSummary;
+  lib\features\deliveries\domain\courier_order.dart:164:  final String? addressLabel;
+  lib\features\deliveries\domain\courier_order.dart:165:  final String? serviceCityName;
+  lib\features\deliveries\domain\courier_order.dart:166:  final String? deliveryAreaName;
+  lib\features\deliveries\domain\courier_order.dart:167:  final String? customerAvatarUrl;
+  lib\features\deliveries\domain\courier_order.dart:180:    final serviceCity = _map(json['service_city']);
+  lib\features\deliveries\domain\courier_order.dart:181:    final deliveryArea = _map(json['delivery_area']);
+  lib\features\deliveries\domain\courier_order.dart:182:    final addressServiceCity = _map(address?['service_city']);
+  lib\features\deliveries\domain\courier_order.dart:183:    final addressDeliveryArea = _map(address?['delivery_area']);
+  lib\features\deliveries\domain\courier_order.dart:184:    final itemsJson = _list(json['items']);
+> lib\features\deliveries\domain\courier_order.dart:185:    final rawStatus = json['status']?.toString() ?? '';
+> lib\features\deliveries\domain\courier_order.dart:186:    final status = courierOrderStatusFromRaw(rawStatus);
+  lib\features\deliveries\domain\courier_order.dart:187:    final createdAt = _parseDate(json['created_at']);
+  lib\features\deliveries\domain\courier_order.dart:188:    final assignedAt = _parseDate(json['assigned_at'], fallback: createdAt);
+  lib\features\deliveries\domain\courier_order.dart:189:    final deliveredAt =
+  lib\features\deliveries\domain\courier_order.dart:190:        _parseOptionalDate(json['delivered_at']) ??
+  lib\features\deliveries\domain\courier_order.dart:191:        _deliveredAtFromHistory(json['history']);
+  lib\features\deliveries\domain\courier_order.dart:192:    final items = itemsJson.map(_itemFromJson).toList();
+  lib\features\deliveries\domain\courier_order.dart:193:    final label = _clean(address?['name']);
+  lib\features\deliveries\domain\courier_order.dart:194:    final details = _clean(address?['details']);
+  lib\features\deliveries\domain\courier_order.dart:195:    final manualArea = _clean(address?['manual_area']);
+  lib\features\deliveries\domain\courier_order.dart:196:    final manualCity = _clean(address?['manual_city']);
+  lib\features\deliveries\domain\courier_order.dart:197:    final areaName =
+  lib\features\deliveries\domain\courier_order.dart:198:        _clean(addressDeliveryArea?['name']) ?? _clean(deliveryArea?['name']);
+  lib\features\deliveries\domain\courier_order.dart:235:          'العنوان غير محدد',
+  lib\features\deliveries\domain\courier_order.dart:236:      addressLabel: label,
+  lib\features\deliveries\domain\courier_order.dart:237:      area: areaName ?? cityName ?? 'غير محدد',
+  lib\features\deliveries\domain\courier_order.dart:238:      total: _number(json['total_price']),
+  lib\features\deliveries\domain\courier_order.dart:239:      deliveryPrice: _optionalNumber(json['delivery_price']),
+> lib\features\deliveries\domain\courier_order.dart:240:      status: status,
+> lib\features\deliveries\domain\courier_order.dart:241:      rawStatus: rawStatus,
+  lib\features\deliveries\domain\courier_order.dart:242:      createdAt: createdAt,
+  lib\features\deliveries\domain\courier_order.dart:243:      expectedDeliveryAt: assignedAt.add(const Duration(hours: 1)),
+  lib\features\deliveries\domain\courier_order.dart:244:      items: items,
+  lib\features\deliveries\domain\courier_order.dart:245:      itemsCount: _int(
+  lib\features\deliveries\domain\courier_order.dart:246:        json['items_count'],
+  lib\features\deliveries\domain\courier_order.dart:247:        fallback: _sumItemQuantities(items),
+  lib\features\deliveries\domain\courier_order.dart:248:      ),
+  lib\features\deliveries\domain\courier_order.dart:249:      marketName: marketName,
+  lib\features\deliveries\domain\courier_order.dart:250:      marketBranch: marketBranch,
+  lib\features\deliveries\domain\courier_order.dart:251:      marketCount: marketCount,
+  lib\features\deliveries\domain\courier_order.dart:252:      marketSummary: _marketSummary(
+  lib\features\deliveries\domain\courier_order.dart:253:        marketName: marketName,
+  lib\features\deliveries\domain\courier_order.dart:273:    );
+  lib\features\deliveries\domain\courier_order.dart:274:  }
+  lib\features\deliveries\domain\courier_order.dart:275:
+  lib\features\deliveries\domain\courier_order.dart:276:  int get itemCount => itemsCount;
+  lib\features\deliveries\domain\courier_order.dart:277:
+> lib\features\deliveries\domain\courier_order.dart:278:  bool get isActiveCourierOrder => status.isActiveCourierOrder;
+  lib\features\deliveries\domain\courier_order.dart:279:
+> lib\features\deliveries\domain\courier_order.dart:280:  bool get isDelivered => status.isDelivered;
+  lib\features\deliveries\domain\courier_order.dart:281:
+> lib\features\deliveries\domain\courier_order.dart:282:  bool get isTerminal => status.isTerminal;
+  lib\features\deliveries\domain\courier_order.dart:283:
+> lib\features\deliveries\domain\courier_order.dart:284:  bool get requiresPickup => status.requiresPickup;
+  lib\features\deliveries\domain\courier_order.dart:285:
+> lib\features\deliveries\domain\courier_order.dart:286:  bool get canMarkPickedUp => status.canMarkPickedUp;
+  lib\features\deliveries\domain\courier_order.dart:287:
+> lib\features\deliveries\domain\courier_order.dart:288:  bool get canMarkDelivered => status.canMarkDelivered;
+  lib\features\deliveries\domain\courier_order.dart:289:
+  lib\features\deliveries\domain\courier_order.dart:290:  CourierOrder copyWith({
+> lib\features\deliveries\domain\courier_order.dart:291:    CourierOrderStatus? status,
+> lib\features\deliveries\domain\courier_order.dart:292:    String? rawStatus,
+  lib\features\deliveries\domain\courier_order.dart:293:    DateTime? deliveredAt,
+  lib\features\deliveries\domain\courier_order.dart:294:    String? deliveryNote,
+  lib\features\deliveries\domain\courier_order.dart:295:    DeliveryProof? deliveryProof,
+  lib\features\deliveries\domain\courier_order.dart:296:    String? deliveryProofUrl,
+  lib\features\deliveries\domain\courier_order.dart:297:  }) {
+  lib\features\deliveries\domain\courier_order.dart:298:    return CourierOrder(
+  lib\features\deliveries\domain\courier_order.dart:299:      id: id,
+  lib\features\deliveries\domain\courier_order.dart:300:      customerName: customerName,
+  lib\features\deliveries\domain\courier_order.dart:301:      phone: phone,
+  lib\features\deliveries\domain\courier_order.dart:302:      address: address,
+  lib\features\deliveries\domain\courier_order.dart:303:      area: area,
+  lib\features\deliveries\domain\courier_order.dart:304:      total: total,
+  lib\features\deliveries\domain\courier_order.dart:305:      deliveryPrice: deliveryPrice,
+> lib\features\deliveries\domain\courier_order.dart:306:      status: status ?? this.status,
+> lib\features\deliveries\domain\courier_order.dart:307:      rawStatus: rawStatus ?? this.rawStatus,
+  lib\features\deliveries\domain\courier_order.dart:308:      createdAt: createdAt,
+  lib\features\deliveries\domain\courier_order.dart:309:      expectedDeliveryAt: expectedDeliveryAt,
+  lib\features\deliveries\domain\courier_order.dart:310:      items: items,
+  lib\features\deliveries\domain\courier_order.dart:311:      itemsCount: itemsCount,
+  lib\features\deliveries\domain\courier_order.dart:312:      marketName: marketName,
+  lib\features\deliveries\domain\courier_order.dart:313:      marketBranch: marketBranch,
+  lib\features\deliveries\domain\courier_order.dart:314:      marketCount: marketCount,
+  lib\features\deliveries\domain\courier_order.dart:315:      marketSummary: marketSummary,
+  lib\features\deliveries\domain\courier_order.dart:316:      addressLabel: addressLabel,
+  lib\features\deliveries\domain\courier_order.dart:317:      serviceCityName: serviceCityName,
+  lib\features\deliveries\domain\courier_order.dart:318:      deliveryAreaName: deliveryAreaName,
+  lib\features\deliveries\domain\courier_order.dart:319:      customerAvatarUrl: customerAvatarUrl,
+  lib\features\deliveries\domain\courier_order.dart:370:  }
+  lib\features\deliveries\domain\courier_order.dart:371:
+  lib\features\deliveries\domain\courier_order.dart:372:  static DateTime? _deliveredAtFromHistory(Object? value) {
+  lib\features\deliveries\domain\courier_order.dart:373:    DateTime? latestDeliveredAt;
+  lib\features\deliveries\domain\courier_order.dart:374:    for (final event in _list(value)) {
+> lib\features\deliveries\domain\courier_order.dart:375:      final toStatus = event['to_status']?.toString().trim().toLowerCase();
+> lib\features\deliveries\domain\courier_order.dart:376:      if (toStatus != 'delivered') continue;
+  lib\features\deliveries\domain\courier_order.dart:377:
+  lib\features\deliveries\domain\courier_order.dart:378:      final createdAt = _parseOptionalDate(event['created_at']);
+  lib\features\deliveries\domain\courier_order.dart:379:      if (createdAt == null) continue;
+  lib\features\deliveries\domain\courier_order.dart:380:      if (latestDeliveredAt == null || createdAt.isAfter(latestDeliveredAt)) {
+  lib\features\deliveries\domain\courier_order.dart:381:        latestDeliveredAt = createdAt;
+  lib\features\deliveries\domain\courier_order.dart:382:      }
+  lib\features\deliveries\domain\courier_order.dart:383:    }
+  lib\features\deliveries\domain\courier_order.dart:384:    return latestDeliveredAt;
+  lib\features\deliveries\domain\courier_order.dart:385:  }
+  lib\features\deliveries\domain\courier_order.dart:386:
+  lib\features\deliveries\domain\courier_order.dart:387:  static double _number(Object? value) => _optionalNumber(value) ?? 0;
+  lib\features\deliveries\domain\courier_order.dart:388:
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:1:import 'package:flutter/foundation.dart';
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:2:
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:3:import '../../data/courier_profile_api.dart';
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:4:import '../../domain/courier_account.dart';
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:5:
+> lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:6:class CourierProfileController extends ChangeNotifier {
+> lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:7:  CourierProfileController({CourierProfileApi api = const CourierProfileApi()})
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:8:    : _api = api;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:9:
+> lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:10:  final CourierProfileApi _api;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:11:
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:12:  CourierAccount? _account;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:13:  bool _isLoading = false;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:14:  bool _hasLoaded = false;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:15:  String? _errorMessage;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:16:  Future<void>? _loadInFlight;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:17:
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:18:  CourierAccount? get account => _account;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:19:  bool get isLoading => _isLoading;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:20:  bool get hasLoaded => _hasLoaded;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:21:  String? get errorMessage => _errorMessage;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:22:
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:93:
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:94:  @override
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:95:  Widget build(BuildContext context) {
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:96:    final isDark = Theme.of(context).brightness == Brightness.dark;
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:97:    final activeCount = orders
+> lib\features\deliveries\presentation\views\courier_orders_view.dart:98:        .where((order) => order.isActiveCourierOrder)
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:99:        .length;
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:100:    final pickupRequiredCount = orders
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:101:        .where((order) => order.requiresPickup)
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:102:        .length;
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:103:    final totalValue = orders.fold<double>(
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:104:      0,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:105:      (total, order) => total + order.total,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:106:    );
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:107:
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:108:    return Container(
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:109:      padding: const EdgeInsets.all(10),
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:110:      decoration: BoxDecoration(
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:130:          const SizedBox(width: 8),
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:131:          _SummaryPill(
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:132:            icon: AppIcons.box,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:133:            value: '$pickupRequiredCount',
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:134:            label: 'مطلوب الاستلام',
+> lib\features\deliveries\presentation\views\courier_orders_view.dart:135:            color: CourierOrderStatus.assigned.color,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:136:            isDark: isDark,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:137:          ),
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:138:          const SizedBox(width: 8),
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:139:          _SummaryPill(
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:140:            icon: AppIcons.money_3,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:141:            value: AppCurrency.format(totalValue),
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:142:            label: 'القيمة',
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:143:            color: AppColors.success,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:144:            isDark: isDark,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:145:          ),
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:146:        ],
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:147:      ),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:9:import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:10:import '../../../../core/theme/app_theme_controller.dart';
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:11:import '../../domain/courier_account.dart';
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:12:import '../controllers/courier_profile_controller.dart';
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:13:
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:14:class CourierProfileView extends StatefulWidget {
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:15:  const CourierProfileView({
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:16:    super.key,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:17:    required this.activeOrders,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:18:    required this.deliveredOrders,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:19:    required this.onActiveOrdersTap,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:20:    required this.onDeliveredSummaryTap,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:21:    required this.onLogout,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:22:    this.controller,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:23:  });
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:24:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:25:  final int activeOrders;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:26:  final int deliveredOrders;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:27:  final VoidCallback onActiveOrdersTap;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:28:  final VoidCallback onDeliveredSummaryTap;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:29:  final VoidCallback onLogout;
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:30:  final CourierProfileController? controller;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:31:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:32:  @override
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:33:  State<CourierProfileView> createState() => _CourierProfileViewState();
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:34:}
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:35:
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:36:class _CourierProfileViewState extends State<CourierProfileView> {
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:37:  late CourierProfileController _controller;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:38:  late bool _ownsController;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:39:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:40:  @override
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:41:  void initState() {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:42:    super.initState();
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:43:    _controller = widget.controller ?? CourierProfileController();
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:44:    _ownsController = widget.controller == null;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:45:    _controller.loadAccountIfNeeded();
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:46:  }
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:47:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:48:  @override
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:49:  void didUpdateWidget(covariant CourierProfileView oldWidget) {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:50:    super.didUpdateWidget(oldWidget);
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:51:    if (oldWidget.controller == widget.controller) return;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:52:    if (_ownsController) _controller.dispose();
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:53:    _controller = widget.controller ?? CourierProfileController();
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:54:    _ownsController = widget.controller == null;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:55:    _controller.loadAccountIfNeeded();
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:56:  }
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:57:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:58:  @override
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:59:  void dispose() {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:60:    if (_ownsController) _controller.dispose();
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:61:    super.dispose();
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:62:  }
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:63:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:64:  @override
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:65:  Widget build(BuildContext context) {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:124:  final int activeOrders;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:125:  final int deliveredOrders;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:126:  final VoidCallback onActiveOrdersTap;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:127:  final VoidCallback onDeliveredSummaryTap;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:128:  final VoidCallback onLogout;
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:129:  final CourierProfileController controller;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:130:  final bool isDark;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:131:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:132:  @override
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:133:  Widget build(BuildContext context) {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:134:    final account = controller.account;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:135:    final errorMessage = controller.errorMessage;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:136:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:137:    return Column(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:138:      crossAxisAlignment: CrossAxisAlignment.start,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:139:      children: [
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:140:        const PageTopBar(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:141:          title: 'حساب المندوب',
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:200:              _SettingsInfoTile(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:201:                icon: AppIcons.tick_circle,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:202:                title: 'حالة استقبال الطلبات',
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:203:                subtitle:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:204:                    account?.profile?.availabilityLabel ?? 'الحالة غير معروفة',
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:205:                accentColor: _availabilityColor(account?.profile?.isAvailable),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:206:              ),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:207:              _SettingsDivider(isDark: isDark),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:208:              _SettingsInfoTile(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:209:                icon: AppIcons.truck_fast,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:210:                title: 'نوع المركبة',
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:211:                subtitle: account?.profile?.vehicleTypeLabel ?? 'غير محدد',
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:212:                accentColor: AppColors.primary,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:213:              ),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:214:              _SettingsDivider(isDark: isDark),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:215:              _SettingsInfoTile(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:216:                icon: AppIcons.info_circle,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:217:                title: 'رقم اللوحة',
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:238:        ],
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:239:      ],
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:240:    );
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:241:  }
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:242:
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:243:  Color _availabilityColor(bool? isAvailable) {
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:244:    return switch (isAvailable) {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:245:      true => AppColors.success,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:246:      false => AppColors.error,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:247:      null => AppColors.warning,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:248:    };
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:249:  }
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:250:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:251:  void _showLogoutDialog(BuildContext context, VoidCallback onLogout) {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:252:    showDialog<void>(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:253:      context: context,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:254:      builder: (dialogContext) {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:255:        return AlertDialog(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:256:          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:29:class _CourierShellViewState extends State<CourierShellView>
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:30:    with WidgetsBindingObserver {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:31:  final _api = const CourierOrdersApi();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:32:  final _notificationsApi = const CourierNotificationsApi();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:33:  final _notificationsController = CourierNotificationsController();
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:34:  final _profileController = CourierProfileController();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:35:  List<CourierOrder> _orders = [];
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:36:  bool _loading = true;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:37:  String? _loadError;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:38:  int _selectedIndex = 0;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:39:  int _unreadNotificationCount = 0;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:40:  Timer? _remoteStateRefreshTimer;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:41:  bool _refreshingRemoteState = false;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:42:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:43:  @override
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:44:  void initState() {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:45:    super.initState();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:46:    WidgetsBinding.instance.addObserver(this);
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:85:      _refreshingRemoteState = false;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:86:    }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:87:  }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:88:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:89:  List<CourierOrder> get _activeOrders {
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:90:    return _orders.where((order) => order.isActiveCourierOrder).toList();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:91:  }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:92:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:93:  List<CourierOrder> get _deliveredOrders {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:94:    return _orders.where((order) => order.isDelivered).toList();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:95:  }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:96:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:97:  Future<void> _loadOrders() async {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:98:    if (mounted) {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:99:      setState(() {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:100:        _loading = true;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:101:        _loadError = null;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:102:      });
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:173:        orders: _deliveredOrders,
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:174:        onRefresh: _loadOrders,
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:175:        unreadNotificationCount: _unreadNotificationCount,
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:176:        onNotificationsPressed: _openNotifications,
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:177:      ),
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:178:      CourierProfileView(
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:179:        controller: _profileController,
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:180:        activeOrders: _activeOrders.length,
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:181:        deliveredOrders: _deliveredOrders.length,
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:182:        onActiveOrdersTap: () => setState(() => _selectedIndex = 0),
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:183:        onDeliveredSummaryTap: _openDeliveredSummary,
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:184:        onLogout: _logout,
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:185:      ),
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:186:    ];
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:187:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:188:    return Scaffold(
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:189:      body: SafeArea(
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:190:        child: _loading
+  lib\features\deliveries\presentation\views\order_details_view.dart:353:
+  lib\features\deliveries\presentation\views\order_details_view.dart:354:  @override
+  lib\features\deliveries\presentation\views\order_details_view.dart:355:  Widget build(BuildContext context) {
+  lib\features\deliveries\presentation\views\order_details_view.dart:356:    final isUpdating = submittingAction != null;
+  lib\features\deliveries\presentation\views\order_details_view.dart:357:    final pickupCompleted =
+> lib\features\deliveries\presentation\views\order_details_view.dart:358:        order.status == CourierOrderStatus.pickedUp || order.isDelivered;
+  lib\features\deliveries\presentation\views\order_details_view.dart:359:
+  lib\features\deliveries\presentation\views\order_details_view.dart:360:    return Column(
+  lib\features\deliveries\presentation\views\order_details_view.dart:361:      children: [
+  lib\features\deliveries\presentation\views\order_details_view.dart:362:        AppActionButton(
+  lib\features\deliveries\presentation\views\order_details_view.dart:363:          label: 'تم الاستلام',
+  lib\features\deliveries\presentation\views\order_details_view.dart:364:          icon: pickupCompleted ? AppIcons.tick_circle : AppIcons.box,
+  lib\features\deliveries\presentation\views\order_details_view.dart:365:          variant: pickupCompleted
+  lib\features\deliveries\presentation\views\order_details_view.dart:366:              ? AppActionButtonVariant.outlined
+  lib\features\deliveries\presentation\views\order_details_view.dart:367:              : AppActionButtonVariant.filled,
+  lib\features\deliveries\presentation\views\order_details_view.dart:368:          isLoading: submittingAction == _SubmittingOrderAction.pickup,
+  lib\features\deliveries\presentation\views\order_details_view.dart:369:          onPressed: !isUpdating && order.canMarkPickedUp
+  lib\features\deliveries\presentation\views\order_details_view.dart:370:              ? onPickupPressed
+  lib\features\deliveries\presentation\views\order_details_view.dart:409:        children: [
+  lib\features\deliveries\presentation\views\order_details_view.dart:410:          Container(
+  lib\features\deliveries\presentation\views\order_details_view.dart:411:            width: 52,
+  lib\features\deliveries\presentation\views\order_details_view.dart:412:            height: 52,
+  lib\features\deliveries\presentation\views\order_details_view.dart:413:            decoration: BoxDecoration(
+> lib\features\deliveries\presentation\views\order_details_view.dart:414:              color: order.status.color.withValues(alpha: isDark ? 0.18 : 0.10),
+  lib\features\deliveries\presentation\views\order_details_view.dart:415:              borderRadius: BorderRadius.circular(8),
+  lib\features\deliveries\presentation\views\order_details_view.dart:416:            ),
+> lib\features\deliveries\presentation\views\order_details_view.dart:417:            child: Icon(AppIcons.box, color: order.status.color, size: 26),
+  lib\features\deliveries\presentation\views\order_details_view.dart:418:          ),
+  lib\features\deliveries\presentation\views\order_details_view.dart:419:          const SizedBox(width: 12),
+  lib\features\deliveries\presentation\views\order_details_view.dart:420:          Expanded(
+  lib\features\deliveries\presentation\views\order_details_view.dart:421:            child: Column(
+  lib\features\deliveries\presentation\views\order_details_view.dart:422:              crossAxisAlignment: CrossAxisAlignment.start,
+  lib\features\deliveries\presentation\views\order_details_view.dart:423:              children: [
+  lib\features\deliveries\presentation\views\order_details_view.dart:424:                Text(
+> lib\features\deliveries\presentation\views\order_details_view.dart:425:                  order.status.label,
+  lib\features\deliveries\presentation\views\order_details_view.dart:426:                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+> lib\features\deliveries\presentation\views\order_details_view.dart:427:                    color: order.status.color,
+  lib\features\deliveries\presentation\views\order_details_view.dart:428:                    fontWeight: FontWeight.w900,
+  lib\features\deliveries\presentation\views\order_details_view.dart:429:                  ),
+  lib\features\deliveries\presentation\views\order_details_view.dart:430:                ),
+  lib\features\deliveries\presentation\views\order_details_view.dart:431:                const SizedBox(height: 5),
+  lib\features\deliveries\presentation\views\order_details_view.dart:432:                Text(
+  lib\features\deliveries\presentation\views\order_details_view.dart:433:                  '${order.area} • ${AppCurrency.format(order.total)}',
+  lib\features\deliveries\presentation\views\order_details_view.dart:434:                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+  lib\features\deliveries\presentation\views\order_details_view.dart:435:                    color: mutedColor,
+  lib\features\deliveries\presentation\views\order_details_view.dart:436:                    fontWeight: FontWeight.w800,
+  lib\features\deliveries\presentation\views\order_details_view.dart:437:                  ),
+  lib\features\deliveries\presentation\views\order_details_view.dart:438:                ),
+  lib\features\deliveries\presentation\views\order_details_view.dart:439:              ],
+  lib\features\deliveries\presentation\widgets\order_card.dart:20:  @override
+  lib\features\deliveries\presentation\widgets\order_card.dart:21:  Widget build(BuildContext context) {
+  lib\features\deliveries\presentation\widgets\order_card.dart:22:    final theme = Theme.of(context);
+  lib\features\deliveries\presentation\widgets\order_card.dart:23:    final isDark = theme.brightness == Brightness.dark;
+  lib\features\deliveries\presentation\widgets\order_card.dart:24:    final borderColor = isDark
+> lib\features\deliveries\presentation\widgets\order_card.dart:25:        ? order.status.color.withValues(alpha: 0.28)
+> lib\features\deliveries\presentation\widgets\order_card.dart:26:        : order.status.color.withValues(alpha: 0.20);
+  lib\features\deliveries\presentation\widgets\order_card.dart:27:    final panelColor = isDark ? AppColors.darkCardColor : Colors.white;
+> lib\features\deliveries\presentation\widgets\order_card.dart:28:    final tintColor = order.status.color.withValues(
+  lib\features\deliveries\presentation\widgets\order_card.dart:29:      alpha: isDark ? 0.12 : 0.05,
+  lib\features\deliveries\presentation\widgets\order_card.dart:30:    );
+  lib\features\deliveries\presentation\widgets\order_card.dart:31:    final mutedColor = isDark
+  lib\features\deliveries\presentation\widgets\order_card.dart:32:        ? Colors.white.withValues(alpha: 0.58)
+  lib\features\deliveries\presentation\widgets\order_card.dart:33:        : Colors.black.withValues(alpha: 0.54);
+  lib\features\deliveries\presentation\widgets\order_card.dart:34:    final shadow = isDark
+  lib\features\deliveries\presentation\widgets\order_card.dart:35:        ? null
+  lib\features\deliveries\presentation\widgets\order_card.dart:36:        : [
+  lib\features\deliveries\presentation\widgets\order_card.dart:37:            BoxShadow(
+> lib\features\deliveries\presentation\widgets\order_card.dart:38:              color: order.status.color.withValues(alpha: 0.12),
+  lib\features\deliveries\presentation\widgets\order_card.dart:39:              blurRadius: 24,
+  lib\features\deliveries\presentation\widgets\order_card.dart:40:              offset: const Offset(0, 12),
+  lib\features\deliveries\presentation\widgets\order_card.dart:41:            ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:42:            BoxShadow(
+  lib\features\deliveries\presentation\widgets\order_card.dart:43:              color: Colors.black.withValues(alpha: 0.035),
+  lib\features\deliveries\presentation\widgets\order_card.dart:44:              blurRadius: 10,
+  lib\features\deliveries\presentation\widgets\order_card.dart:45:              offset: const Offset(0, 4),
+  lib\features\deliveries\presentation\widgets\order_card.dart:46:            ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:47:          ];
+  lib\features\deliveries\presentation\widgets\order_card.dart:48:
+  lib\features\deliveries\presentation\widgets\order_card.dart:49:    return Material(
+  lib\features\deliveries\presentation\widgets\order_card.dart:50:      color: Colors.transparent,
+  lib\features\deliveries\presentation\widgets\order_card.dart:71:                children: [
+  lib\features\deliveries\presentation\widgets\order_card.dart:72:                  Container(
+  lib\features\deliveries\presentation\widgets\order_card.dart:73:                    width: 46,
+  lib\features\deliveries\presentation\widgets\order_card.dart:74:                    height: 46,
+  lib\features\deliveries\presentation\widgets\order_card.dart:75:                    decoration: BoxDecoration(
+> lib\features\deliveries\presentation\widgets\order_card.dart:76:                      color: order.status.color.withValues(
+  lib\features\deliveries\presentation\widgets\order_card.dart:77:                        alpha: isDark ? 0.22 : 0.13,
+  lib\features\deliveries\presentation\widgets\order_card.dart:78:                      ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:79:                      borderRadius: BorderRadius.circular(8),
+  lib\features\deliveries\presentation\widgets\order_card.dart:80:                      border: Border.all(
+> lib\features\deliveries\presentation\widgets\order_card.dart:81:                        color: order.status.color.withValues(alpha: 0.20),
+  lib\features\deliveries\presentation\widgets\order_card.dart:82:                      ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:83:                    ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:84:                    child: Icon(
+  lib\features\deliveries\presentation\widgets\order_card.dart:85:                      order.isDelivered
+  lib\features\deliveries\presentation\widgets\order_card.dart:86:                          ? AppIcons.tick_circle
+  lib\features\deliveries\presentation\widgets\order_card.dart:87:                          : AppIcons.truck_fast,
+> lib\features\deliveries\presentation\widgets\order_card.dart:88:                      color: order.status.color,
+  lib\features\deliveries\presentation\widgets\order_card.dart:89:                      size: 24,
+  lib\features\deliveries\presentation\widgets\order_card.dart:90:                    ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:91:                  ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:92:                  const SizedBox(width: 12),
+  lib\features\deliveries\presentation\widgets\order_card.dart:93:                  Expanded(
+  lib\features\deliveries\presentation\widgets\order_card.dart:94:                    child: Column(
+  lib\features\deliveries\presentation\widgets\order_card.dart:95:                      crossAxisAlignment: CrossAxisAlignment.start,
+  lib\features\deliveries\presentation\widgets\order_card.dart:96:                      children: [
+  lib\features\deliveries\presentation\widgets\order_card.dart:97:                        Wrap(
+  lib\features\deliveries\presentation\widgets\order_card.dart:98:                          spacing: 8,
+  lib\features\deliveries\presentation\widgets\order_card.dart:99:                          runSpacing: 6,
+  lib\features\deliveries\presentation\widgets\order_card.dart:100:                          crossAxisAlignment: WrapCrossAlignment.center,
+  lib\features\deliveries\presentation\widgets\order_card.dart:101:                          children: [
+> lib\features\deliveries\presentation\widgets\order_card.dart:102:                            _StatusChip(status: order.status, isDark: isDark),
+  lib\features\deliveries\presentation\widgets\order_card.dart:103:                            Text(
+  lib\features\deliveries\presentation\widgets\order_card.dart:104:                              order.id,
+  lib\features\deliveries\presentation\widgets\order_card.dart:105:                              style: theme.textTheme.bodySmall?.copyWith(
+  lib\features\deliveries\presentation\widgets\order_card.dart:106:                                color: mutedColor,
+  lib\features\deliveries\presentation\widgets\order_card.dart:107:                                fontWeight: FontWeight.w800,
+  lib\features\deliveries\presentation\widgets\order_card.dart:108:                              ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:109:                            ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:110:                          ],
+  lib\features\deliveries\presentation\widgets\order_card.dart:111:                        ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:112:                        const SizedBox(height: 7),
+  lib\features\deliveries\presentation\widgets\order_card.dart:113:                        Text(
+  lib\features\deliveries\presentation\widgets\order_card.dart:114:                          order.customerName,
+  lib\features\deliveries\presentation\widgets\order_card.dart:151:                      child: _OrderMeta(
+  lib\features\deliveries\presentation\widgets\order_card.dart:152:                        icon: AppIcons.tick_circle,
+  lib\features\deliveries\presentation\widgets\order_card.dart:153:                        label: 'وقت التسليم',
+  lib\features\deliveries\presentation\widgets\order_card.dart:154:                        value: _formatTime(order.deliveredAt),
+  lib\features\deliveries\presentation\widgets\order_card.dart:155:                        mutedColor: mutedColor,
+> lib\features\deliveries\presentation\widgets\order_card.dart:156:                        accentColor: order.status.color,
+  lib\features\deliveries\presentation\widgets\order_card.dart:157:                        isDark: isDark,
+  lib\features\deliveries\presentation\widgets\order_card.dart:158:                      ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:159:                    ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:160:                    const SizedBox(width: 10),
+  lib\features\deliveries\presentation\widgets\order_card.dart:161:                  ],
+  lib\features\deliveries\presentation\widgets\order_card.dart:162:                  Expanded(
+  lib\features\deliveries\presentation\widgets\order_card.dart:163:                    child: _OrderMeta(
+  lib\features\deliveries\presentation\widgets\order_card.dart:164:                      icon: AppIcons.shopping_bag,
+  lib\features\deliveries\presentation\widgets\order_card.dart:165:                      label: 'المنتجات',
+  lib\features\deliveries\presentation\widgets\order_card.dart:166:                      value: '${order.itemCount}',
+  lib\features\deliveries\presentation\widgets\order_card.dart:167:                      mutedColor: mutedColor,
+> lib\features\deliveries\presentation\widgets\order_card.dart:168:                      accentColor: order.status.color,
+  lib\features\deliveries\presentation\widgets\order_card.dart:169:                      isDark: isDark,
+  lib\features\deliveries\presentation\widgets\order_card.dart:170:                    ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:171:                  ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:172:                  const SizedBox(width: 10),
+  lib\features\deliveries\presentation\widgets\order_card.dart:173:                  Expanded(
+  lib\features\deliveries\presentation\widgets\order_card.dart:174:                    child: _OrderMeta(
+  lib\features\deliveries\presentation\widgets\order_card.dart:175:                      icon: AppIcons.money_3,
+  lib\features\deliveries\presentation\widgets\order_card.dart:176:                      label: 'القيمة',
+  lib\features\deliveries\presentation\widgets\order_card.dart:177:                      value: AppCurrency.format(order.total),
+  lib\features\deliveries\presentation\widgets\order_card.dart:178:                      mutedColor: mutedColor,
+> lib\features\deliveries\presentation\widgets\order_card.dart:179:                      accentColor: order.status.color,
+  lib\features\deliveries\presentation\widgets\order_card.dart:180:                      isDark: isDark,
+  lib\features\deliveries\presentation\widgets\order_card.dart:181:                    ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:182:                  ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:183:                ],
+  lib\features\deliveries\presentation\widgets\order_card.dart:184:              ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:185:            ],
+  lib\features\deliveries\presentation\widgets\order_card.dart:186:          ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:187:        ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:188:      ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:189:    );
+  lib\features\deliveries\presentation\widgets\order_card.dart:190:  }
+  lib\features\deliveries\presentation\widgets\order_card.dart:191:
+  lib\features\deliveries\presentation\widgets\order_card.dart:197:    final minute = value.minute.toString().padLeft(2, '0');
+  lib\features\deliveries\presentation\widgets\order_card.dart:198:    return '$day/$month $hour:$minute';
+  lib\features\deliveries\presentation\widgets\order_card.dart:199:  }
+  lib\features\deliveries\presentation\widgets\order_card.dart:200:}
+  lib\features\deliveries\presentation\widgets\order_card.dart:201:
+> lib\features\deliveries\presentation\widgets\order_card.dart:202:class _StatusChip extends StatelessWidget {
+> lib\features\deliveries\presentation\widgets\order_card.dart:203:  const _StatusChip({required this.status, required this.isDark});
+  lib\features\deliveries\presentation\widgets\order_card.dart:204:
+> lib\features\deliveries\presentation\widgets\order_card.dart:205:  final CourierOrderStatus status;
+  lib\features\deliveries\presentation\widgets\order_card.dart:206:  final bool isDark;
+  lib\features\deliveries\presentation\widgets\order_card.dart:207:
+  lib\features\deliveries\presentation\widgets\order_card.dart:208:  @override
+  lib\features\deliveries\presentation\widgets\order_card.dart:209:  Widget build(BuildContext context) {
+  lib\features\deliveries\presentation\widgets\order_card.dart:210:    return Container(
+  lib\features\deliveries\presentation\widgets\order_card.dart:211:      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+  lib\features\deliveries\presentation\widgets\order_card.dart:212:      decoration: BoxDecoration(
+> lib\features\deliveries\presentation\widgets\order_card.dart:213:        color: status.color.withValues(alpha: isDark ? 0.22 : 0.12),
+  lib\features\deliveries\presentation\widgets\order_card.dart:214:        borderRadius: BorderRadius.circular(8),
+> lib\features\deliveries\presentation\widgets\order_card.dart:215:        border: Border.all(color: status.color.withValues(alpha: 0.18)),
+  lib\features\deliveries\presentation\widgets\order_card.dart:216:      ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:217:      child: Text(
+> lib\features\deliveries\presentation\widgets\order_card.dart:218:        status.label,
+  lib\features\deliveries\presentation\widgets\order_card.dart:219:        style: TextStyle(
+> lib\features\deliveries\presentation\widgets\order_card.dart:220:          color: status.color,
+  lib\features\deliveries\presentation\widgets\order_card.dart:221:          fontSize: 12,
+  lib\features\deliveries\presentation\widgets\order_card.dart:222:          fontWeight: FontWeight.w900,
+  lib\features\deliveries\presentation\widgets\order_card.dart:223:        ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:224:      ),
+  lib\features\deliveries\presentation\widgets\order_card.dart:225:    );
+  lib\features\deliveries\presentation\widgets\order_card.dart:226:  }
+  lib\features\deliveries\presentation\widgets\order_card.dart:227:}
+  lib\features\deliveries\presentation\widgets\order_card.dart:228:
+  lib\features\deliveries\presentation\widgets\order_card.dart:229:class _OrderMeta extends StatelessWidget {
+  lib\features\deliveries\presentation\widgets\order_card.dart:230:  const _OrderMeta({
+  lib\features\deliveries\presentation\widgets\order_card.dart:231:    required this.icon,
+  lib\features\deliveries\presentation\widgets\order_card.dart:232:    required this.label,
+
+
+
+
+=== APP LIFECYCLE ===
+
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:25:  @override
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:26:  State<CourierShellView> createState() => _CourierShellViewState();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:27:}
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:28:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:29:class _CourierShellViewState extends State<CourierShellView>
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:30:    with WidgetsBindingObserver {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:31:  final _api = const CourierOrdersApi();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:32:  final _notificationsApi = const CourierNotificationsApi();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:33:  final _notificationsController = CourierNotificationsController();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:34:  final _profileController = CourierProfileController();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:35:  List<CourierOrder> _orders = [];
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:36:  bool _loading = true;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:37:  String? _loadError;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:38:  int _selectedIndex = 0;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:39:  int _unreadNotificationCount = 0;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:40:  Timer? _remoteStateRefreshTimer;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:41:  bool _refreshingRemoteState = false;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:42:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:62:    _profileController.dispose();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:63:    super.dispose();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:64:  }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:65:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:66:  @override
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:67:  void didChangeAppLifecycleState(AppLifecycleState state) {
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:68:    if (state == AppLifecycleState.resumed) {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:69:      unawaited(_refreshRemoteState());
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:70:    }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:71:  }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:72:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:73:  Future<void> _refreshRemoteState() async {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:74:    if (!mounted || _refreshingRemoteState) return;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:75:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:76:    _refreshingRemoteState = true;
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:77:    try {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:78:      await Future.wait([
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:79:        _profileController.refresh(),
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:80:        _refreshUnreadNotificationCount(),
+
+
+
+
+=== FIREBASE LISTENERS ===
+
+
+=== COURIER API ENDPOINTS ===
+
+  lib\yalla_home_app.dart:3:
+  lib\yalla_home_app.dart:4:import 'core/constants/app_constants.dart';
+  lib\yalla_home_app.dart:5:import 'core/auth/password_changed_notifier.dart';
+  lib\yalla_home_app.dart:6:import 'core/auth/session_expired_notifier.dart';
+> lib\yalla_home_app.dart:7:import 'core/presentation/widgets/offline_connection_banner.dart';
+  lib\yalla_home_app.dart:8:import 'core/routing/app_navigator.dart';
+  lib\yalla_home_app.dart:9:import 'core/routing/app_router.dart';
+  lib\yalla_home_app.dart:10:import 'core/routing/app_routes.dart';
+  lib\yalla_home_app.dart:11:import 'core/theme/app_theme.dart';
+  lib\yalla_home_app.dart:12:import 'core/theme/app_theme_controller.dart';
+  lib\yalla_home_app.dart:13:
+  lib\yalla_home_app.dart:14:class YallaHomeApp extends StatefulWidget {
+  lib\yalla_home_app.dart:15:  const YallaHomeApp({super.key});
+  lib\yalla_home_app.dart:16:
+  lib\yalla_home_app.dart:17:  @override
+  lib\yalla_home_app.dart:207:          ],
+  lib\yalla_home_app.dart:208:          builder: (context, child) {
+  lib\yalla_home_app.dart:209:            return Directionality(
+  lib\yalla_home_app.dart:210:              textDirection: TextDirection.rtl,
+> lib\yalla_home_app.dart:211:              child: OfflineConnectionBanner(
+  lib\yalla_home_app.dart:212:                child: child ?? const SizedBox.shrink(),
+  lib\yalla_home_app.dart:213:              ),
+  lib\yalla_home_app.dart:214:            );
+  lib\yalla_home_app.dart:215:          },
+  lib\yalla_home_app.dart:216:          initialRoute: AppRoutes.splash,
+  lib\yalla_home_app.dart:217:          onGenerateRoute: AppRouter.generateRoute,
+  lib\yalla_home_app.dart:218:        );
+  lib\yalla_home_app.dart:219:      },
+  lib\yalla_home_app.dart:220:    );
+  lib\yalla_home_app.dart:221:  }
+  lib\core\connectivity\internet_status_controller.dart:12:  final Connectivity _connectivity;
+  lib\core\connectivity\internet_status_controller.dart:13:  StreamSubscription<List<ConnectivityResult>>? _subscription;
+  lib\core\connectivity\internet_status_controller.dart:14:  Timer? _verificationTimer;
+  lib\core\connectivity\internet_status_controller.dart:15:  bool _hasStatus = false;
+> lib\core\connectivity\internet_status_controller.dart:16:  bool _isOffline = false;
+  lib\core\connectivity\internet_status_controller.dart:17:  bool _isChecking = false;
+  lib\core\connectivity\internet_status_controller.dart:18:  bool _started = false;
+  lib\core\connectivity\internet_status_controller.dart:19:  bool _isDisposed = false;
+  lib\core\connectivity\internet_status_controller.dart:20:
+  lib\core\connectivity\internet_status_controller.dart:21:  bool get hasStatus => _hasStatus;
+> lib\core\connectivity\internet_status_controller.dart:22:  bool get isOffline => _hasStatus && _isOffline;
+  lib\core\connectivity\internet_status_controller.dart:23:
+  lib\core\connectivity\internet_status_controller.dart:24:  Future<void> start() async {
+  lib\core\connectivity\internet_status_controller.dart:25:    if (_started) return;
+  lib\core\connectivity\internet_status_controller.dart:26:    _started = true;
+  lib\core\connectivity\internet_status_controller.dart:27:
+  lib\core\connectivity\internet_status_controller.dart:28:    _subscription = _connectivity.onConnectivityChanged.listen(
+  lib\core\connectivity\internet_status_controller.dart:29:      (result) => unawaited(_updateFromConnectivity(result)),
+> lib\core\connectivity\internet_status_controller.dart:30:      onError: (_) => _setStatus(isOffline: false),
+  lib\core\connectivity\internet_status_controller.dart:31:    );
+  lib\core\connectivity\internet_status_controller.dart:32:    _verificationTimer = Timer.periodic(
+  lib\core\connectivity\internet_status_controller.dart:33:      const Duration(seconds: 12),
+  lib\core\connectivity\internet_status_controller.dart:34:      (_) => unawaited(refresh()),
+  lib\core\connectivity\internet_status_controller.dart:35:    );
+  lib\core\connectivity\internet_status_controller.dart:36:
+  lib\core\connectivity\internet_status_controller.dart:37:    await refresh();
+  lib\core\connectivity\internet_status_controller.dart:38:  }
+  lib\core\connectivity\internet_status_controller.dart:39:
+  lib\core\connectivity\internet_status_controller.dart:40:  Future<void> refresh() async {
+  lib\core\connectivity\internet_status_controller.dart:44:    try {
+  lib\core\connectivity\internet_status_controller.dart:45:      final result = await _connectivity.checkConnectivity();
+  lib\core\connectivity\internet_status_controller.dart:46:      await _updateFromConnectivity(result);
+  lib\core\connectivity\internet_status_controller.dart:47:    } catch (_) {
+> lib\core\connectivity\internet_status_controller.dart:48:      _setStatus(isOffline: false);
+  lib\core\connectivity\internet_status_controller.dart:49:    } finally {
+  lib\core\connectivity\internet_status_controller.dart:50:      _isChecking = false;
+  lib\core\connectivity\internet_status_controller.dart:51:    }
+  lib\core\connectivity\internet_status_controller.dart:52:  }
+  lib\core\connectivity\internet_status_controller.dart:53:
+  lib\core\connectivity\internet_status_controller.dart:54:  Future<void> _updateFromConnectivity(List<ConnectivityResult> result) async {
+  lib\core\connectivity\internet_status_controller.dart:55:    if (_isDisposed) return;
+  lib\core\connectivity\internet_status_controller.dart:56:
+  lib\core\connectivity\internet_status_controller.dart:57:    final hasNetwork =
+  lib\core\connectivity\internet_status_controller.dart:58:        result.isNotEmpty &&
+  lib\core\connectivity\internet_status_controller.dart:59:        result.any((connection) => connection != ConnectivityResult.none);
+  lib\core\connectivity\internet_status_controller.dart:60:
+  lib\core\connectivity\internet_status_controller.dart:61:    if (!hasNetwork) {
+> lib\core\connectivity\internet_status_controller.dart:62:      _setStatus(isOffline: true);
+  lib\core\connectivity\internet_status_controller.dart:63:      return;
+  lib\core\connectivity\internet_status_controller.dart:64:    }
+  lib\core\connectivity\internet_status_controller.dart:65:
+  lib\core\connectivity\internet_status_controller.dart:66:    final canReachInternet = await hasInternetAccess();
+  lib\core\connectivity\internet_status_controller.dart:67:    if (_isDisposed) return;
+  lib\core\connectivity\internet_status_controller.dart:68:
+> lib\core\connectivity\internet_status_controller.dart:69:    _setStatus(isOffline: canReachInternet == false);
+  lib\core\connectivity\internet_status_controller.dart:70:  }
+  lib\core\connectivity\internet_status_controller.dart:71:
+> lib\core\connectivity\internet_status_controller.dart:72:  void _setStatus({required bool isOffline}) {
+  lib\core\connectivity\internet_status_controller.dart:73:    if (_isDisposed) return;
+> lib\core\connectivity\internet_status_controller.dart:74:    if (_hasStatus && _isOffline == isOffline) return;
+  lib\core\connectivity\internet_status_controller.dart:75:
+  lib\core\connectivity\internet_status_controller.dart:76:    _hasStatus = true;
+> lib\core\connectivity\internet_status_controller.dart:77:    _isOffline = isOffline;
+  lib\core\connectivity\internet_status_controller.dart:78:    notifyListeners();
+  lib\core\connectivity\internet_status_controller.dart:79:  }
+  lib\core\connectivity\internet_status_controller.dart:80:
+  lib\core\connectivity\internet_status_controller.dart:81:  @override
+  lib\core\connectivity\internet_status_controller.dart:82:  void dispose() {
+  lib\core\connectivity\internet_status_controller.dart:83:    _isDisposed = true;
+  lib\core\connectivity\internet_status_controller.dart:84:    _subscription?.cancel();
+  lib\core\connectivity\internet_status_controller.dart:85:    _verificationTimer?.cancel();
+  lib\core\connectivity\internet_status_controller.dart:86:    super.dispose();
+  lib\core\connectivity\internet_status_controller.dart:87:  }
+  lib\core\presentation\widgets\offline_connection_banner.dart:4:
+  lib\core\presentation\widgets\offline_connection_banner.dart:5:import '../../constants/app_colors.dart';
+  lib\core\presentation\widgets\offline_connection_banner.dart:6:import '../../connectivity/internet_status_controller.dart';
+  lib\core\presentation\widgets\offline_connection_banner.dart:7:
+> lib\core\presentation\widgets\offline_connection_banner.dart:8:class OfflineConnectionBanner extends StatefulWidget {
+> lib\core\presentation\widgets\offline_connection_banner.dart:9:  const OfflineConnectionBanner({super.key, required this.child});
+  lib\core\presentation\widgets\offline_connection_banner.dart:10:
+  lib\core\presentation\widgets\offline_connection_banner.dart:11:  final Widget child;
+  lib\core\presentation\widgets\offline_connection_banner.dart:12:
+  lib\core\presentation\widgets\offline_connection_banner.dart:13:  @override
+> lib\core\presentation\widgets\offline_connection_banner.dart:14:  State<OfflineConnectionBanner> createState() =>
+> lib\core\presentation\widgets\offline_connection_banner.dart:15:      _OfflineConnectionBannerState();
+  lib\core\presentation\widgets\offline_connection_banner.dart:16:}
+  lib\core\presentation\widgets\offline_connection_banner.dart:17:
+> lib\core\presentation\widgets\offline_connection_banner.dart:18:class _OfflineConnectionBannerState extends State<OfflineConnectionBanner> {
+  lib\core\presentation\widgets\offline_connection_banner.dart:19:  late final InternetStatusController _internetStatusController;
+  lib\core\presentation\widgets\offline_connection_banner.dart:20:
+  lib\core\presentation\widgets\offline_connection_banner.dart:21:  @override
+  lib\core\presentation\widgets\offline_connection_banner.dart:22:  void initState() {
+  lib\core\presentation\widgets\offline_connection_banner.dart:23:    super.initState();
+  lib\core\presentation\widgets\offline_connection_banner.dart:24:    _internetStatusController = InternetStatusController();
+  lib\core\presentation\widgets\offline_connection_banner.dart:25:    unawaited(_internetStatusController.start());
+  lib\core\presentation\widgets\offline_connection_banner.dart:26:  }
+  lib\core\presentation\widgets\offline_connection_banner.dart:27:
+  lib\core\presentation\widgets\offline_connection_banner.dart:28:  @override
+  lib\core\presentation\widgets\offline_connection_banner.dart:37:      controller: _internetStatusController,
+  lib\core\presentation\widgets\offline_connection_banner.dart:38:      child: AnimatedBuilder(
+  lib\core\presentation\widgets\offline_connection_banner.dart:39:        animation: _internetStatusController,
+  lib\core\presentation\widgets\offline_connection_banner.dart:40:        builder: (context, _) {
+> lib\core\presentation\widgets\offline_connection_banner.dart:41:          final isOffline = _internetStatusController.isOffline;
+  lib\core\presentation\widgets\offline_connection_banner.dart:42:
+  lib\core\presentation\widgets\offline_connection_banner.dart:43:          return Stack(
+  lib\core\presentation\widgets\offline_connection_banner.dart:44:            children: [
+  lib\core\presentation\widgets\offline_connection_banner.dart:45:              widget.child,
+  lib\core\presentation\widgets\offline_connection_banner.dart:46:              Positioned(
+  lib\core\presentation\widgets\offline_connection_banner.dart:47:                top: 0,
+  lib\core\presentation\widgets\offline_connection_banner.dart:48:                left: 0,
+  lib\core\presentation\widgets\offline_connection_banner.dart:49:                right: 0,
+  lib\core\presentation\widgets\offline_connection_banner.dart:50:                child: SafeArea(
+  lib\core\presentation\widgets\offline_connection_banner.dart:51:                  bottom: false,
+  lib\core\presentation\widgets\offline_connection_banner.dart:52:                  child: IgnorePointer(
+> lib\core\presentation\widgets\offline_connection_banner.dart:53:                    ignoring: !isOffline,
+  lib\core\presentation\widgets\offline_connection_banner.dart:54:                    child: AnimatedSwitcher(
+  lib\core\presentation\widgets\offline_connection_banner.dart:55:                      duration: const Duration(milliseconds: 220),
+> lib\core\presentation\widgets\offline_connection_banner.dart:56:                      child: isOffline
+> lib\core\presentation\widgets\offline_connection_banner.dart:57:                          ? const _OfflineBannerContent()
+  lib\core\presentation\widgets\offline_connection_banner.dart:58:                          : const SizedBox.shrink(),
+  lib\core\presentation\widgets\offline_connection_banner.dart:59:                    ),
+  lib\core\presentation\widgets\offline_connection_banner.dart:60:                  ),
+  lib\core\presentation\widgets\offline_connection_banner.dart:61:                ),
+  lib\core\presentation\widgets\offline_connection_banner.dart:62:              ),
+  lib\core\presentation\widgets\offline_connection_banner.dart:63:            ],
+  lib\core\presentation\widgets\offline_connection_banner.dart:64:          );
+  lib\core\presentation\widgets\offline_connection_banner.dart:65:        },
+  lib\core\presentation\widgets\offline_connection_banner.dart:66:      ),
+  lib\core\presentation\widgets\offline_connection_banner.dart:67:    );
+  lib\core\presentation\widgets\offline_connection_banner.dart:68:  }
+  lib\core\presentation\widgets\offline_connection_banner.dart:69:}
+  lib\core\presentation\widgets\offline_connection_banner.dart:70:
+> lib\core\presentation\widgets\offline_connection_banner.dart:71:class _OfflineBannerContent extends StatelessWidget {
+> lib\core\presentation\widgets\offline_connection_banner.dart:72:  const _OfflineBannerContent();
+  lib\core\presentation\widgets\offline_connection_banner.dart:73:
+  lib\core\presentation\widgets\offline_connection_banner.dart:74:  @override
+  lib\core\presentation\widgets\offline_connection_banner.dart:75:  Widget build(BuildContext context) {
+  lib\core\presentation\widgets\offline_connection_banner.dart:76:    final theme = Theme.of(context);
+  lib\core\presentation\widgets\offline_connection_banner.dart:77:
+  lib\core\presentation\widgets\offline_connection_banner.dart:78:    return Container(
+> lib\core\presentation\widgets\offline_connection_banner.dart:79:      key: const ValueKey('offline-connection-banner'),
+  lib\core\presentation\widgets\offline_connection_banner.dart:80:      width: double.infinity,
+  lib\core\presentation\widgets\offline_connection_banner.dart:81:      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+  lib\core\presentation\widgets\offline_connection_banner.dart:82:      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+  lib\core\presentation\widgets\offline_connection_banner.dart:83:      decoration: BoxDecoration(
+  lib\core\presentation\widgets\offline_connection_banner.dart:84:        color: AppColors.error,
+  lib\core\presentation\widgets\offline_connection_banner.dart:85:        borderRadius: BorderRadius.circular(8),
+  lib\core\presentation\widgets\offline_connection_banner.dart:86:        boxShadow: [
+  lib\core\presentation\widgets\offline_connection_banner.dart:87:          BoxShadow(
+  lib\core\presentation\widgets\offline_connection_banner.dart:88:            color: Colors.black.withValues(alpha: 0.22),
+  lib\core\presentation\widgets\offline_connection_banner.dart:89:            blurRadius: 18,
+  lib\core\routing\app_router.dart:1:import 'package:flutter/material.dart';
+  lib\core\routing\app_router.dart:2:
+  lib\core\routing\app_router.dart:3:import '../../features/auth/presentation/views/login_view.dart';
+> lib\core\routing\app_router.dart:4:import '../../features/deliveries/presentation/views/courier_shell_view.dart';
+  lib\core\routing\app_router.dart:5:import '../../features/splash/presentation/views/splash_view.dart';
+  lib\core\routing\app_router.dart:6:import 'app_routes.dart';
+  lib\core\routing\app_router.dart:7:
+  lib\core\routing\app_router.dart:8:class AppRouter {
+  lib\core\routing\app_router.dart:9:  AppRouter._();
+  lib\core\routing\app_router.dart:10:
+  lib\core\routing\app_router.dart:11:  static Route<dynamic> generateRoute(RouteSettings settings) {
+  lib\core\routing\app_router.dart:12:    return switch (settings.name) {
+  lib\core\routing\app_router.dart:13:      AppRoutes.splash => _buildRoute(const SplashView(), settings),
+  lib\core\routing\app_router.dart:14:      AppRoutes.login => _buildRoute(const LoginView(), settings),
+  lib\features\deliveries\data\courier_notifications_api.dart:1:import '../../../core/auth/auth_session.dart';
+> lib\features\deliveries\data\courier_notifications_api.dart:2:import '../domain/courier_notification.dart';
+  lib\features\deliveries\data\courier_notifications_api.dart:3:
+  lib\features\deliveries\data\courier_notifications_api.dart:4:class CourierNotificationsApi {
+  lib\features\deliveries\data\courier_notifications_api.dart:5:  const CourierNotificationsApi();
+  lib\features\deliveries\data\courier_notifications_api.dart:6:
+  lib\features\deliveries\data\courier_notifications_api.dart:7:  Future<List<CourierNotification>> loadNotifications() async {
+  lib\features\deliveries\data\courier_notifications_api.dart:8:    final data = await AuthSession.instance.getJson('notifications/');
+  lib\features\deliveries\data\courier_notifications_api.dart:9:    return parseNotificationsResponse(data);
+  lib\features\deliveries\data\courier_notifications_api.dart:10:  }
+  lib\features\deliveries\data\courier_notifications_api.dart:11:
+  lib\features\deliveries\data\courier_notifications_api.dart:12:  Future<int> loadUnreadCount() async {
+  lib\features\deliveries\data\courier_orders_api.dart:1:import '../../../core/auth/auth_session.dart';
+> lib\features\deliveries\data\courier_orders_api.dart:2:import '../domain/courier_order.dart';
+  lib\features\deliveries\data\courier_orders_api.dart:3:
+  lib\features\deliveries\data\courier_orders_api.dart:4:class CourierOrdersApi {
+  lib\features\deliveries\data\courier_orders_api.dart:5:  const CourierOrdersApi();
+  lib\features\deliveries\data\courier_orders_api.dart:6:
+  lib\features\deliveries\data\courier_orders_api.dart:7:  Future<List<CourierOrder>> loadOrders() async {
+> lib\features\deliveries\data\courier_orders_api.dart:8:    final data = await AuthSession.instance.getJson('courier/orders/');
+  lib\features\deliveries\data\courier_orders_api.dart:9:    final rows = data is Map<String, dynamic> ? data['results'] : data;
+  lib\features\deliveries\data\courier_orders_api.dart:10:    return (rows as List<dynamic>)
+  lib\features\deliveries\data\courier_orders_api.dart:11:        .whereType<Map<String, dynamic>>()
+  lib\features\deliveries\data\courier_orders_api.dart:12:        .map(CourierOrder.fromJson)
+  lib\features\deliveries\data\courier_orders_api.dart:13:        .toList();
+  lib\features\deliveries\data\courier_orders_api.dart:14:  }
+  lib\features\deliveries\data\courier_orders_api.dart:15:
+  lib\features\deliveries\data\courier_orders_api.dart:16:  Future<CourierOrder> loadOrder(String orderId) async {
+> lib\features\deliveries\data\courier_orders_api.dart:17:    final data = await AuthSession.instance.getJson('courier/orders/$orderId/');
+  lib\features\deliveries\data\courier_orders_api.dart:18:    return CourierOrder.fromJson(data as Map<String, dynamic>);
+  lib\features\deliveries\data\courier_orders_api.dart:19:  }
+  lib\features\deliveries\data\courier_orders_api.dart:20:
+  lib\features\deliveries\data\courier_orders_api.dart:21:  Future<CourierOrder> markPickedUp(String orderId) async {
+  lib\features\deliveries\data\courier_orders_api.dart:22:    final data = await AuthSession.instance.patchJson(
+> lib\features\deliveries\data\courier_orders_api.dart:23:      'courier/orders/$orderId/status/',
+  lib\features\deliveries\data\courier_orders_api.dart:24:      {'status': 'picked_up'},
+  lib\features\deliveries\data\courier_orders_api.dart:25:    );
+  lib\features\deliveries\data\courier_orders_api.dart:26:    return CourierOrder.fromJson(data as Map<String, dynamic>);
+  lib\features\deliveries\data\courier_orders_api.dart:27:  }
+  lib\features\deliveries\data\courier_orders_api.dart:28:
+  lib\features\deliveries\data\courier_orders_api.dart:29:  Future<CourierOrder> markDelivered(String orderId, {String? note}) async {
+  lib\features\deliveries\data\courier_orders_api.dart:30:    final deliveryNote = note?.trim();
+  lib\features\deliveries\data\courier_orders_api.dart:31:    final data = await AuthSession.instance
+> lib\features\deliveries\data\courier_orders_api.dart:32:        .patchJson('courier/orders/$orderId/status/', {
+  lib\features\deliveries\data\courier_orders_api.dart:33:          'status': 'delivered',
+  lib\features\deliveries\data\courier_orders_api.dart:34:          if (deliveryNote != null && deliveryNote.isNotEmpty)
+  lib\features\deliveries\data\courier_orders_api.dart:35:            'delivery_note': deliveryNote,
+  lib\features\deliveries\data\courier_orders_api.dart:36:        });
+  lib\features\deliveries\data\courier_orders_api.dart:37:    return CourierOrder.fromJson(data as Map<String, dynamic>);
+  lib\features\deliveries\data\courier_orders_api.dart:38:  }
+  lib\features\deliveries\data\courier_orders_api.dart:39:}
+  lib\features\deliveries\data\courier_profile_api.dart:1:import '../../../core/auth/auth_session.dart';
+  lib\features\deliveries\data\courier_profile_api.dart:2:import '../../../core/network/api_exception.dart';
+> lib\features\deliveries\data\courier_profile_api.dart:3:import '../domain/courier_account.dart';
+  lib\features\deliveries\data\courier_profile_api.dart:4:
+  lib\features\deliveries\data\courier_profile_api.dart:5:class CourierProfileApi {
+  lib\features\deliveries\data\courier_profile_api.dart:6:  const CourierProfileApi();
+  lib\features\deliveries\data\courier_profile_api.dart:7:
+  lib\features\deliveries\data\courier_profile_api.dart:8:  Future<CourierAccount> loadAccount() async {
+  lib\features\deliveries\data\courier_profile_api.dart:9:    final data = await AuthSession.instance.getJson('auth/me/');
+  lib\features\deliveries\data\courier_profile_api.dart:10:    final user = parseUserResponse(data);
+  lib\features\deliveries\data\courier_profile_api.dart:11:    AuthSession.instance.currentUser = user.raw;
+  lib\features\deliveries\data\courier_profile_api.dart:12:    return user;
+  lib\features\deliveries\data\courier_profile_api.dart:13:  }
+  lib\features\deliveries\domain\courier_account.dart:84:    final value = serviceCityName?.trim();
+  lib\features\deliveries\domain\courier_account.dart:85:    return value == null || value.isEmpty ? 'مدينة الخدمة غير محددة' : value;
+  lib\features\deliveries\domain\courier_account.dart:86:  }
+  lib\features\deliveries\domain\courier_account.dart:87:
+> lib\features\deliveries\domain\courier_account.dart:88:  String get availabilityLabel {
+  lib\features\deliveries\domain\courier_account.dart:89:    return switch (isAvailable) {
+  lib\features\deliveries\domain\courier_account.dart:90:      true => 'متاح لاستقبال الطلبات',
+  lib\features\deliveries\domain\courier_account.dart:91:      false => 'غير متاح حاليًا',
+  lib\features\deliveries\domain\courier_account.dart:92:      null => 'الحالة غير معروفة',
+  lib\features\deliveries\domain\courier_account.dart:93:    };
+  lib\features\deliveries\domain\courier_account.dart:94:  }
+  lib\features\deliveries\domain\courier_account.dart:95:
+  lib\features\deliveries\domain\courier_account.dart:96:  String get vehicleTypeLabel {
+  lib\features\deliveries\domain\courier_account.dart:97:    final value = vehicleType?.trim();
+  lib\features\deliveries\domain\courier_account.dart:98:    return value == null || value.isEmpty ? 'غير محدد' : value;
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:1:import 'package:flutter/foundation.dart';
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:2:
+> lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:3:import '../../data/courier_notifications_api.dart';
+> lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:4:import '../../domain/courier_notification.dart';
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:5:
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:6:class CourierNotificationsController extends ChangeNotifier {
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:7:  CourierNotificationsController({
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:8:    CourierNotificationsApi api = const CourierNotificationsApi(),
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:9:  }) : _api = api;
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:10:
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:11:  final CourierNotificationsApi _api;
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:12:
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:13:  List<CourierNotification> _notifications = const [];
+  lib\features\deliveries\presentation\controllers\courier_notifications_controller.dart:14:  int _unreadCount = 0;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:1:import 'package:flutter/foundation.dart';
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:2:
+> lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:3:import '../../data/courier_profile_api.dart';
+> lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:4:import '../../domain/courier_account.dart';
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:5:
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:6:class CourierProfileController extends ChangeNotifier {
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:7:  CourierProfileController({CourierProfileApi api = const CourierProfileApi()})
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:8:    : _api = api;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:9:
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:10:  final CourierProfileApi _api;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:11:
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:12:  CourierAccount? _account;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:13:  bool _isLoading = false;
+  lib\features\deliveries\presentation\controllers\courier_profile_controller.dart:14:  bool _hasLoaded = false;
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:3:import '../../../../core/constants/app_colors.dart';
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:4:import '../../../../core/icons/app_icons.dart';
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:5:import '../../../../core/presentation/widgets/page_top_bar.dart';
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:6:import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
+> lib\features\deliveries\presentation\views\courier_notifications_view.dart:7:import '../../data/courier_orders_api.dart';
+> lib\features\deliveries\presentation\views\courier_notifications_view.dart:8:import '../../domain/courier_notification.dart';
+> lib\features\deliveries\presentation\views\courier_notifications_view.dart:9:import '../../domain/courier_order.dart';
+> lib\features\deliveries\presentation\views\courier_notifications_view.dart:10:import '../controllers/courier_notifications_controller.dart';
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:11:
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:12:class CourierNotificationsView extends StatefulWidget {
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:13:  const CourierNotificationsView({
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:14:    super.key,
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:15:    required this.onOrderTap,
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:16:    required this.onUnreadCountChanged,
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:17:    this.controller,
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:18:    this.ordersApi = const CourierOrdersApi(),
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:19:  });
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:20:
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:3:import '../../../../core/constants/app_colors.dart';
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:4:import '../../../../core/formatters/app_currency.dart';
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:5:import '../../../../core/icons/app_icons.dart';
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:6:import '../../../../core/presentation/widgets/page_top_bar.dart';
+> lib\features\deliveries\presentation\views\courier_orders_view.dart:7:import '../../domain/courier_order.dart';
+> lib\features\deliveries\presentation\views\courier_orders_view.dart:8:import '../widgets/courier_notifications_button.dart';
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:9:import '../widgets/order_card.dart';
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:10:import 'order_details_view.dart';
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:11:
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:12:class CourierOrdersView extends StatefulWidget {
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:13:  const CourierOrdersView({
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:14:    super.key,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:15:    required this.orders,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:16:    required this.onPickedUp,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:17:    required this.onDelivered,
+  lib\features\deliveries\presentation\views\courier_orders_view.dart:18:    required this.onRefresh,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:7:import '../../../../core/presentation/widgets/network_image_or_placeholder.dart';
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:8:import '../../../../core/presentation/widgets/page_top_bar.dart';
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:9:import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:10:import '../../../../core/theme/app_theme_controller.dart';
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:11:import '../../domain/courier_account.dart';
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:12:import '../controllers/courier_profile_controller.dart';
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:13:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:14:class CourierProfileView extends StatefulWidget {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:15:  const CourierProfileView({
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:16:    super.key,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:17:    required this.activeOrders,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:18:    required this.deliveredOrders,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:19:    required this.onActiveOrdersTap,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:20:    required this.onDeliveredSummaryTap,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:21:    required this.onLogout,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:22:    this.controller,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:200:              _SettingsInfoTile(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:201:                icon: AppIcons.tick_circle,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:202:                title: 'حالة استقبال الطلبات',
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:203:                subtitle:
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:204:                    account?.profile?.availabilityLabel ?? 'الحالة غير معروفة',
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:205:                accentColor: _availabilityColor(account?.profile?.isAvailable),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:206:              ),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:207:              _SettingsDivider(isDark: isDark),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:208:              _SettingsInfoTile(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:209:                icon: AppIcons.truck_fast,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:210:                title: 'نوع المركبة',
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:211:                subtitle: account?.profile?.vehicleTypeLabel ?? 'غير محدد',
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:212:                accentColor: AppColors.primary,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:213:              ),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:214:              _SettingsDivider(isDark: isDark),
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:215:              _SettingsInfoTile(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:239:      ],
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:240:    );
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:241:  }
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:242:
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:243:  Color _availabilityColor(bool? isAvailable) {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:244:    return switch (isAvailable) {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:245:      true => AppColors.success,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:246:      false => AppColors.error,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:247:      null => AppColors.warning,
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:248:    };
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:249:  }
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:250:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:251:  void _showLogoutDialog(BuildContext context, VoidCallback onLogout) {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:252:    showDialog<void>(
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:253:      context: context,
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:5:import '../../../../core/constants/app_colors.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:6:import '../../../../core/auth/auth_session.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:7:import '../../../../core/icons/app_icons.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:8:import '../../../../core/routing/app_routes.dart';
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:9:import '../../data/courier_notifications_api.dart';
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:10:import '../../data/courier_orders_api.dart';
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:11:import '../../domain/courier_order.dart';
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:12:import '../controllers/courier_notifications_controller.dart';
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:13:import '../controllers/courier_profile_controller.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:14:import '../widgets/delivery_confirmation_sheet.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:15:import 'courier_notifications_view.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:16:import 'courier_orders_view.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:17:import 'courier_profile_view.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:18:import 'delivered_history_view.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:19:import 'delivered_summary_view.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:20:import 'order_details_view.dart';
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:21:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:22:class CourierShellView extends StatefulWidget {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:23:  const CourierShellView({super.key});
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:2:
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:3:import '../../../../core/constants/app_colors.dart';
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:4:import '../../../../core/icons/app_icons.dart';
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:5:import '../../../../core/presentation/widgets/page_top_bar.dart';
+> lib\features\deliveries\presentation\views\delivered_history_view.dart:6:import '../../domain/courier_order.dart';
+> lib\features\deliveries\presentation\views\delivered_history_view.dart:7:import '../widgets/courier_notifications_button.dart';
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:8:import '../widgets/order_card.dart';
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:9:import 'order_details_view.dart';
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:10:
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:11:class DeliveredHistoryView extends StatelessWidget {
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:12:  const DeliveredHistoryView({
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:13:    super.key,
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:14:    required this.orders,
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:15:    required this.onRefresh,
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:16:    required this.unreadNotificationCount,
+  lib\features\deliveries\presentation\views\delivered_history_view.dart:17:    required this.onNotificationsPressed,
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:3:import '../../../../core/constants/app_colors.dart';
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:4:import '../../../../core/formatters/app_currency.dart';
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:5:import '../../../../core/icons/app_icons.dart';
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:6:import '../../../../core/presentation/widgets/page_top_bar.dart';
+> lib\features\deliveries\presentation\views\delivered_summary_view.dart:7:import '../../domain/courier_order.dart';
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:8:import '../widgets/order_card.dart';
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:9:import 'order_details_view.dart';
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:10:
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:11:enum DeliveredSummaryFilter { today, yesterday, week, month, custom }
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:12:
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:13:extension DeliveredSummaryFilterLabel on DeliveredSummaryFilter {
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:14:  String get label {
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:15:    return switch (this) {
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:16:      DeliveredSummaryFilter.today => 'انهارده',
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:17:      DeliveredSummaryFilter.yesterday => 'امبارح',
+  lib\features\deliveries\presentation\views\order_details_view.dart:9:import '../../../../core/presentation/widgets/app_action_button.dart';
+  lib\features\deliveries\presentation\views\order_details_view.dart:10:import '../../../../core/presentation/widgets/network_image_or_placeholder.dart';
+  lib\features\deliveries\presentation\views\order_details_view.dart:11:import '../../../../core/presentation/widgets/page_top_bar.dart';
+  lib\features\deliveries\presentation\views\order_details_view.dart:12:import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
+> lib\features\deliveries\presentation\views\order_details_view.dart:13:import '../../data/courier_orders_api.dart';
+> lib\features\deliveries\presentation\views\order_details_view.dart:14:import '../../domain/courier_order.dart';
+  lib\features\deliveries\presentation\views\order_details_view.dart:15:import '../widgets/delivery_confirmation_sheet.dart';
+  lib\features\deliveries\presentation\views\order_details_view.dart:16:
+  lib\features\deliveries\presentation\views\order_details_view.dart:17:typedef OrderPickedUpHandler = Future<CourierOrder> Function(String orderId);
+  lib\features\deliveries\presentation\views\order_details_view.dart:18:typedef OrderDeliveredHandler =
+  lib\features\deliveries\presentation\views\order_details_view.dart:19:    Future<CourierOrder> Function(
+  lib\features\deliveries\presentation\views\order_details_view.dart:20:      String orderId,
+  lib\features\deliveries\presentation\views\order_details_view.dart:21:      DeliveryConfirmationResult result,
+  lib\features\deliveries\presentation\views\order_details_view.dart:22:    );
+  lib\features\deliveries\presentation\views\order_details_view.dart:23:
+  lib\features\deliveries\presentation\views\order_details_view.dart:24:enum _SubmittingOrderAction { pickup, delivery }
+  lib\features\deliveries\presentation\widgets\order_card.dart:2:
+  lib\features\deliveries\presentation\widgets\order_card.dart:3:import '../../../../core/constants/app_colors.dart';
+  lib\features\deliveries\presentation\widgets\order_card.dart:4:import '../../../../core/formatters/app_currency.dart';
+  lib\features\deliveries\presentation\widgets\order_card.dart:5:import '../../../../core/icons/app_icons.dart';
+> lib\features\deliveries\presentation\widgets\order_card.dart:6:import '../../domain/courier_order.dart';
+  lib\features\deliveries\presentation\widgets\order_card.dart:7:
+  lib\features\deliveries\presentation\widgets\order_card.dart:8:class OrderCard extends StatelessWidget {
+  lib\features\deliveries\presentation\widgets\order_card.dart:9:  const OrderCard({
+  lib\features\deliveries\presentation\widgets\order_card.dart:10:    super.key,
+  lib\features\deliveries\presentation\widgets\order_card.dart:11:    required this.order,
+  lib\features\deliveries\presentation\widgets\order_card.dart:12:    required this.onTap,
+  lib\features\deliveries\presentation\widgets\order_card.dart:13:    this.showDeliveredMeta = false,
+  lib\features\deliveries\presentation\widgets\order_card.dart:14:  });
+  lib\features\deliveries\presentation\widgets\order_card.dart:15:
+  lib\features\deliveries\presentation\widgets\order_card.dart:16:  final CourierOrder order;
+
+
+
+
+=== TIMER DISPOSE / CANCELLATION ===
+
+  lib\yalla_home_app.dart:30:  }
+  lib\yalla_home_app.dart:31:
+  lib\yalla_home_app.dart:32:  @override
+> lib\yalla_home_app.dart:33:  void dispose() {
+  lib\yalla_home_app.dart:34:    SessionExpiredNotifier.instance.removeListener(_handleSessionExpired);
+  lib\yalla_home_app.dart:35:    PasswordChangedNotifier.instance.removeListener(_handlePasswordChanged);
+  lib\yalla_home_app.dart:36:    super.dispose();
+  lib\yalla_home_app.dart:37:  }
+  lib\yalla_home_app.dart:38:
+  lib\yalla_home_app.dart:39:  void _handlePasswordChanged() {
+  lib\yalla_home_app.dart:40:    final eventId = PasswordChangedNotifier.instance.eventId;
+  lib\yalla_home_app.dart:41:    if (eventId == _handledPasswordChangedEventId) return;
+  lib\core\auth\auth_session.dart:345:    _sessionExpiredEventSent = false;
+  lib\core\auth\auth_session.dart:346:    _passwordChanged = false;
+  lib\core\auth\auth_session.dart:347:    _refreshInFlight = null;
+> lib\core\auth\auth_session.dart:348:    _expiryTimer?.cancel();
+  lib\core\auth\auth_session.dart:349:    _expiryTimer = null;
+  lib\core\auth\auth_session.dart:350:    currentUser = null;
+  lib\core\auth\auth_session.dart:351:    await _storage.delete(key: _refreshKey);
+  lib\core\auth\auth_session.dart:352:    await _storage.delete(key: _rememberKey);
+  lib\core\auth\auth_session.dart:353:    await _storage.delete(key: _expiresAtKey);
+  lib\core\auth\auth_session.dart:354:    await _storage.delete(key: _temporarySessionMarkerKey);
+  lib\core\auth\auth_session.dart:355:  }
+  lib\core\auth\auth_session.dart:356:
+  lib\core\auth\auth_session.dart:535:  }
+  lib\core\auth\auth_session.dart:536:
+  lib\core\auth\auth_session.dart:537:  void _scheduleExpiryTimer() {
+> lib\core\auth\auth_session.dart:538:    _expiryTimer?.cancel();
+  lib\core\auth\auth_session.dart:539:    final expiresAt = _sessionExpiresAt;
+  lib\core\auth\auth_session.dart:540:    if (expiresAt == null) return;
+  lib\core\auth\auth_session.dart:541:    final delay = expiresAt.difference(DateTime.now().toUtc());
+  lib\core\auth\auth_session.dart:542:    _expiryTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
+  lib\core\auth\auth_session.dart:543:      unawaited(_expireSession(notify: true));
+  lib\core\auth\auth_session.dart:544:    });
+  lib\core\auth\auth_session.dart:545:  }
+  lib\core\auth\auth_session.dart:546:
+  lib\core\auth\auth_session.dart:552:    _sessionExpiresAt = null;
+  lib\core\auth\auth_session.dart:553:    _rememberSession = false;
+  lib\core\auth\auth_session.dart:554:    _refreshInFlight = null;
+> lib\core\auth\auth_session.dart:555:    _expiryTimer?.cancel();
+  lib\core\auth\auth_session.dart:556:    _expiryTimer = null;
+  lib\core\auth\auth_session.dart:557:    currentUser = null;
+  lib\core\auth\auth_session.dart:558:    await _storage.delete(key: _refreshKey);
+  lib\core\auth\auth_session.dart:559:    await _storage.delete(key: _rememberKey);
+  lib\core\auth\auth_session.dart:560:    await _storage.delete(key: _expiresAtKey);
+  lib\core\auth\auth_session.dart:561:    await _storage.delete(key: _temporarySessionMarkerKey);
+  lib\core\auth\auth_session.dart:562:    if (shouldNotify) {
+  lib\core\auth\auth_session.dart:563:      _sessionExpiredEventSent = true;
+  lib\core\connectivity\internet_status_controller.dart:79:  }
+  lib\core\connectivity\internet_status_controller.dart:80:
+  lib\core\connectivity\internet_status_controller.dart:81:  @override
+> lib\core\connectivity\internet_status_controller.dart:82:  void dispose() {
+  lib\core\connectivity\internet_status_controller.dart:83:    _isDisposed = true;
+> lib\core\connectivity\internet_status_controller.dart:84:    _subscription?.cancel();
+> lib\core\connectivity\internet_status_controller.dart:85:    _verificationTimer?.cancel();
+  lib\core\connectivity\internet_status_controller.dart:86:    super.dispose();
+  lib\core\connectivity\internet_status_controller.dart:87:  }
+  lib\core\connectivity\internet_status_controller.dart:88:}
+  lib\core\connectivity\internet_status_controller.dart:89:
+  lib\core\connectivity\internet_status_controller.dart:90:class InternetStatusScope extends InheritedNotifier<InternetStatusController> {
+  lib\core\connectivity\internet_status_controller.dart:91:  const InternetStatusScope({
+  lib\core\connectivity\internet_status_controller.dart:92:    super.key,
+  lib\core\connectivity\internet_status_controller.dart:93:    required InternetStatusController controller,
+  lib\core\presentation\widgets\offline_connection_banner.dart:26:  }
+  lib\core\presentation\widgets\offline_connection_banner.dart:27:
+  lib\core\presentation\widgets\offline_connection_banner.dart:28:  @override
+> lib\core\presentation\widgets\offline_connection_banner.dart:29:  void dispose() {
+  lib\core\presentation\widgets\offline_connection_banner.dart:30:    _internetStatusController.dispose();
+  lib\core\presentation\widgets\offline_connection_banner.dart:31:    super.dispose();
+  lib\core\presentation\widgets\offline_connection_banner.dart:32:  }
+  lib\core\presentation\widgets\offline_connection_banner.dart:33:
+  lib\core\presentation\widgets\offline_connection_banner.dart:34:  @override
+  lib\core\presentation\widgets\offline_connection_banner.dart:35:  Widget build(BuildContext context) {
+  lib\core\presentation\widgets\offline_connection_banner.dart:36:    return InternetStatusScope(
+  lib\core\presentation\widgets\offline_connection_banner.dart:37:      controller: _internetStatusController,
+  lib\features\auth\presentation\views\login_view.dart:34:  }
+  lib\features\auth\presentation\views\login_view.dart:35:
+  lib\features\auth\presentation\views\login_view.dart:36:  @override
+> lib\features\auth\presentation\views\login_view.dart:37:  void dispose() {
+  lib\features\auth\presentation\views\login_view.dart:38:    _identifierController.dispose();
+  lib\features\auth\presentation\views\login_view.dart:39:    _passwordController.dispose();
+  lib\features\auth\presentation\views\login_view.dart:40:    super.dispose();
+  lib\features\auth\presentation\views\login_view.dart:41:  }
+  lib\features\auth\presentation\views\login_view.dart:42:
+  lib\features\auth\presentation\views\login_view.dart:43:  Future<void> _signIn() async {
+  lib\features\auth\presentation\views\login_view.dart:44:    if (_isLoading) return;
+  lib\features\auth\presentation\views\login_view.dart:45:    _removeWhitespaceFromControllers();
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:44:  }
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:45:
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:46:  @override
+> lib\features\deliveries\presentation\views\courier_notifications_view.dart:47:  void dispose() {
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:48:    _controller.removeListener(_handleControllerChanged);
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:49:    if (_ownsController) _controller.dispose();
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:50:    super.dispose();
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:51:  }
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:52:
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:53:  void _handleControllerChanged() {
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:54:    if (!mounted) return;
+  lib\features\deliveries\presentation\views\courier_notifications_view.dart:55:    widget.onUnreadCountChanged(_controller.unreadCount);
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:56:  }
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:57:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:58:  @override
+> lib\features\deliveries\presentation\views\courier_profile_view.dart:59:  void dispose() {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:60:    if (_ownsController) _controller.dispose();
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:61:    super.dispose();
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:62:  }
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:63:
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:64:  @override
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:65:  Widget build(BuildContext context) {
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:66:    final isDark = Theme.of(context).brightness == Brightness.dark;
+  lib\features\deliveries\presentation\views\courier_profile_view.dart:67:    final backgroundColor = isDark
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:54:  }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:55:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:56:  @override
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:57:  void dispose() {
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:58:    WidgetsBinding.instance.removeObserver(this);
+> lib\features\deliveries\presentation\views\courier_shell_view.dart:59:    _remoteStateRefreshTimer?.cancel();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:60:    _notificationsController.clear();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:61:    _notificationsController.dispose();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:62:    _profileController.dispose();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:63:    super.dispose();
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:64:  }
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:65:
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:66:  @override
+  lib\features\deliveries\presentation\views\courier_shell_view.dart:67:  void didChangeAppLifecycleState(AppLifecycleState state) {
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:796:  }
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:797:
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:798:  @override
+> lib\features\deliveries\presentation\views\delivered_summary_view.dart:799:  void dispose() {
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:800:    _dayController.dispose();
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:801:    _monthController.dispose();
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:802:    _yearController.dispose();
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:803:    super.dispose();
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:804:  }
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:805:
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:806:  @override
+  lib\features\deliveries\presentation\views\delivered_summary_view.dart:807:  Widget build(BuildContext context) {
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:23:  final _noteController = TextEditingController();
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:24:
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:25:  @override
+> lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:26:  void dispose() {
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:27:    _noteController.dispose();
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:28:    super.dispose();
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:29:  }
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:30:
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:31:  Future<void> _confirm() async {
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:32:    final note = _noteController.text.trim();
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:33:    Navigator.pop(
+  lib\features\deliveries\presentation\widgets\delivery_confirmation_sheet.dart:34:      context,
+  lib\features\splash\presentation\views\splash_view.dart:106:  }
+  lib\features\splash\presentation\views\splash_view.dart:107:
+  lib\features\splash\presentation\views\splash_view.dart:108:  @override
+> lib\features\splash\presentation\views\splash_view.dart:109:  void dispose() {
+  lib\features\splash\presentation\views\splash_view.dart:110:    _activityController.dispose();
+  lib\features\splash\presentation\views\splash_view.dart:111:    _entranceController.dispose();
+  lib\features\splash\presentation\views\splash_view.dart:112:    super.dispose();
+  lib\features\splash\presentation\views\splash_view.dart:113:  }
+  lib\features\splash\presentation\views\splash_view.dart:114:
+  lib\features\splash\presentation\views\splash_view.dart:115:  @override
+  lib\features\splash\presentation\views\splash_view.dart:116:  Widget build(BuildContext context) {
+  lib\features\splash\presentation\views\splash_view.dart:117:    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+
+

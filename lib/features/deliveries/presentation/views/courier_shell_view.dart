@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/auth/auth_session.dart';
 import '../../../../core/icons/app_icons.dart';
+import '../../../../core/notifications/courier_push_service.dart';
 import '../../../../core/routing/app_routes.dart';
 import '../../data/courier_notifications_api.dart';
 import '../../data/courier_orders_api.dart';
@@ -37,7 +38,8 @@ class _CourierShellViewState extends State<CourierShellView>
   String? _loadError;
   int _selectedIndex = 0;
   int _unreadNotificationCount = 0;
-  Timer? _remoteStateRefreshTimer;
+  StreamSubscription<CourierPushEvent>? _pushSubscription;
+  Timer? _pushRefreshDebounce;
   bool _refreshingRemoteState = false;
 
   @override
@@ -47,16 +49,17 @@ class _CourierShellViewState extends State<CourierShellView>
     _loadOrders();
     unawaited(_profileController.loadAccountIfNeeded());
     unawaited(_refreshUnreadNotificationCount());
-    _remoteStateRefreshTimer = Timer.periodic(
-      const Duration(seconds: 3),
-      (_) => unawaited(_refreshRemoteState()),
-    );
+    _pushSubscription = CourierPushService.instance.events.listen(_onPushEvent);
+    for (final event in CourierPushService.instance.takePendingOpenedEvents()) {
+      _onPushEvent(event);
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _remoteStateRefreshTimer?.cancel();
+    _pushSubscription?.cancel();
+    _pushRefreshDebounce?.cancel();
     _notificationsController.clear();
     _notificationsController.dispose();
     _profileController.dispose();
@@ -76,6 +79,7 @@ class _CourierShellViewState extends State<CourierShellView>
     _refreshingRemoteState = true;
     try {
       await Future.wait([
+        _loadOrders(),
         _profileController.refresh(),
         _refreshUnreadNotificationCount(),
       ]);
@@ -83,6 +87,49 @@ class _CourierShellViewState extends State<CourierShellView>
       // A temporary refresh failure must not interrupt the courier workflow.
     } finally {
       _refreshingRemoteState = false;
+    }
+  }
+
+  void _onPushEvent(CourierPushEvent event) {
+    if (!mounted) return;
+    final type = event.event;
+    if (type == 'courier_account_disabled') return;
+    if (event.opened && type == 'courier_order_assigned') {
+      unawaited(_openAssignedPush(event.data));
+    }
+    _pushRefreshDebounce?.cancel();
+    _pushRefreshDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      if (type == 'courier_profile_updated' ||
+          type == 'courier_availability_changed') {
+        unawaited(_profileController.refresh());
+      } else {
+        unawaited(_loadOrders());
+      }
+      unawaited(_refreshUnreadNotificationCount());
+    });
+  }
+
+  Future<void> _openAssignedPush(Map<String, dynamic> data) async {
+    final orderId = data['order_id']?.toString();
+    if (orderId == null || orderId.isEmpty) return;
+    try {
+      final order = await _api.loadOrder(orderId);
+      if (!mounted) return;
+      if (!order.isActiveCourierOrder) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لم يعد هذا الطلب معينًا لك.')),
+        );
+        await _loadOrders();
+        return;
+      }
+      _openOrderDetails(order);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لم يعد هذا الطلب متاحًا لك.')),
+      );
+      await _loadOrders();
     }
   }
 
@@ -171,6 +218,7 @@ class _CourierShellViewState extends State<CourierShellView>
       ),
       DeliveredHistoryView(
         orders: _deliveredOrders,
+        onRefresh: _loadOrders,
         unreadNotificationCount: _unreadNotificationCount,
         onNotificationsPressed: _openNotifications,
       ),

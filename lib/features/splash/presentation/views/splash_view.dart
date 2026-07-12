@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/auth/auth_session.dart';
+import '../../../../core/notifications/courier_push_service.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/routing/app_routes.dart';
@@ -92,6 +93,8 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
       _isRestoring = false;
     });
     if (restoreResult == AuthRestoreResult.restored) {
+      await CourierPushService.instance.registerAuthenticatedDevice();
+      if (!mounted) return;
       Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
       return;
     }

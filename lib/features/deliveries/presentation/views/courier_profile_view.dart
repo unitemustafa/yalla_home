@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/auth/auth_session.dart';
-import '../../../../core/connectivity/internet_status_controller.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/icons/app_icons.dart';
@@ -140,7 +139,7 @@ class _ProfileBody extends StatelessWidget {
       children: [
         const PageTopBar(
           title: 'حساب المندوب',
-          subtitle: 'بيانات التشغيل وحالة الاتصال الحالية',
+          subtitle: 'بيانات التشغيل والحساب',
         ),
         const SizedBox(height: 18),
         if (controller.isLoading && !controller.hasLoaded)
@@ -472,8 +471,6 @@ class _CourierHero extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 12),
-                const _StatusBadge(),
               ],
             ),
           ),
@@ -508,62 +505,6 @@ class _CourierAvatar extends StatelessWidget {
           placeholderKey: const Key('courier_profile_avatar_fallback'),
           fit: BoxFit.cover,
           semanticLabel: 'صورة المندوب',
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    final statusController = InternetStatusScope.maybeOf(context);
-
-    if (statusController == null) {
-      return const _StatusBadgeContent(
-        label: 'متصل بالإنترنت',
-        isOffline: false,
-      );
-    }
-
-    return AnimatedBuilder(
-      animation: statusController,
-      builder: (context, _) {
-        final isOffline = statusController.isOffline;
-
-        return _StatusBadgeContent(
-          label: isOffline ? 'غير متصل بالإنترنت' : 'متصل بالإنترنت',
-          isOffline: isOffline,
-        );
-      },
-    );
-  }
-}
-
-class _StatusBadgeContent extends StatelessWidget {
-  const _StatusBadgeContent({required this.label, required this.isOffline});
-
-  final String label;
-  final bool isOffline;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: isOffline
-            ? AppColors.error.withValues(alpha: 0.92)
-            : Colors.white.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        'حالة الاتصال: $label',
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w900,
-          fontSize: 12,
         ),
       ),
     );

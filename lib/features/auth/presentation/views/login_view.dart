@@ -10,6 +10,7 @@ import '../../../../core/presentation/widgets/app_action_button.dart';
 import '../../../../core/presentation/widgets/snackbars/custom_snackbar.dart';
 import '../../../../core/routing/app_routes.dart';
 import '../../../../core/network/api_exception.dart';
+import '../../../../core/notifications/courier_push_service.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -52,6 +53,7 @@ class _LoginViewState extends State<LoginView> {
         password: _passwordController.text,
         remember: _rememberMe,
       );
+      await CourierPushService.instance.registerAuthenticatedDevice();
       if (!mounted) return;
       _goToDashboard();
     } on ApiException catch (error) {
@@ -177,8 +179,7 @@ class _LoginViewState extends State<LoginView> {
                               keyboardType: TextInputType.text,
                               validator: _validateIdentifier,
                               textInputAction: TextInputAction.next,
-                              labelText:
-                                  'رقم الموبايل أو الإيميل أو اسم المستخدم',
+                              labelText: 'موبايل / إيميل / اسم مستخدم',
                               prefixIcon: AppIcons.direct_right,
                             ),
                             _LoginTextField(

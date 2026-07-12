@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -6,6 +8,7 @@ import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/formatters/app_currency.dart';
 import '../../../../core/icons/app_icons.dart';
+import '../../../../core/notifications/courier_push_service.dart';
 import '../../../../core/presentation/widgets/app_action_button.dart';
 import '../../../../core/presentation/widgets/network_image_or_placeholder.dart';
 import '../../../../core/presentation/widgets/page_top_bar.dart';
@@ -45,11 +48,42 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
   bool _loading = true;
   String? _error;
   _SubmittingOrderAction? _submittingAction;
+  StreamSubscription<CourierPushEvent>? _pushSubscription;
 
   @override
   void initState() {
     super.initState();
+    _pushSubscription = CourierPushService.instance.events.listen(
+      _handlePushEvent,
+    );
     _loadDetails();
+  }
+
+  void _handlePushEvent(CourierPushEvent event) {
+    if (!mounted || event.data['order_id']?.toString() != widget.order.id) {
+      return;
+    }
+    if (event.event != 'courier_order_unassigned' &&
+        event.event != 'courier_order_cancelled') {
+      return;
+    }
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    Navigator.of(context).pop();
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(
+          event.event == 'courier_order_unassigned'
+              ? 'لم يعد هذا الطلب معينًا لك.'
+              : 'تم إلغاء هذا الطلب.',
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pushSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadDetails() async {

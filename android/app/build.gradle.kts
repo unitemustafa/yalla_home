@@ -11,6 +11,7 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -37,6 +38,17 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+// Firebase's Android app config is deployment-specific and is deliberately
+// not committed. Apply Google Services automatically when the correct
+// google-services.json is supplied for com.yallamarket.yalla_home.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {

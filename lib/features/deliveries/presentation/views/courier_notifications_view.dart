@@ -382,7 +382,7 @@ class _NotificationSummary extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'إجمالي $totalCount إشعار من الخادم.',
+                  'إجمالي $totalCount إشعار.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.78),
                     height: 1.35,

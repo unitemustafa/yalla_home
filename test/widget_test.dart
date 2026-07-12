@@ -25,16 +25,17 @@ import 'package:yalla_home/yalla_home_app.dart';
 
 void main() {
   testWidgets('shows Yalla Home login screen', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     FlutterSecureStorage.setMockInitialValues({});
     await tester.pumpWidget(const YallaHomeApp());
     await tester.pump(const Duration(milliseconds: 1600));
     await tester.pump();
 
     expect(find.text('أهلاً يا كابتن'), findsOneWidget);
-    expect(
-      find.text('رقم الموبايل أو الإيميل أو اسم المستخدم'),
-      findsOneWidget,
-    );
+    expect(find.text('موبايل / إيميل / اسم مستخدم'), findsOneWidget);
     expect(find.text('دخول Demo'), findsNothing);
     expect(find.text('تذكرني'), findsOneWidget);
     expect(find.text('الدعم الفني'), findsOneWidget);
@@ -334,6 +335,7 @@ void main() {
               deliveredAt: DateTime(2026, 6, 15, 12, 43),
             ),
           ],
+          onRefresh: () async {},
           unreadNotificationCount: 3,
           onNotificationsPressed: () {},
         ),
@@ -874,7 +876,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('غير متاح حاليًا'), findsOneWidget);
-      expect(find.textContaining('حالة الاتصال:'), findsOneWidget);
+      expect(find.textContaining('حالة الاتصال:'), findsNothing);
       expect(find.text('Online'), findsNothing);
       expect(find.text('Offline'), findsNothing);
     },

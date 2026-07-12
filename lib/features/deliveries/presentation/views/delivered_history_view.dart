@@ -12,56 +12,62 @@ class DeliveredHistoryView extends StatelessWidget {
   const DeliveredHistoryView({
     super.key,
     required this.orders,
+    required this.onRefresh,
     required this.unreadNotificationCount,
     required this.onNotificationsPressed,
   });
 
   final List<CourierOrder> orders;
+  final Future<void> Function() onRefresh;
   final int unreadNotificationCount;
   final VoidCallback onNotificationsPressed;
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-      itemCount: orders.isEmpty ? 3 : orders.length + 2,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return PageTopBar(
-            title: 'المسلّمة',
-            subtitle: 'الطلبات المسلّمة',
-            actions: [
-              CourierNotificationsButton(
-                unreadCount: unreadNotificationCount,
-                onPressed: onNotificationsPressed,
-              ),
-            ],
-          );
-        }
-
-        if (index == 1) {
-          return _HistorySummary(count: orders.length);
-        }
-
-        if (orders.isEmpty) {
-          return const _EmptyHistoryState();
-        }
-
-        final order = orders[index - 2];
-        return OrderCard(
-          order: order,
-          showDeliveredMeta: true,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => OrderDetailsView(order: order),
-              ),
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        itemCount: orders.isEmpty ? 3 : orders.length + 2,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return PageTopBar(
+              title: 'المسلّمة',
+              subtitle: 'الطلبات المسلّمة',
+              actions: [
+                CourierNotificationsButton(
+                  unreadCount: unreadNotificationCount,
+                  onPressed: onNotificationsPressed,
+                ),
+              ],
             );
-          },
-        );
-      },
+          }
+
+          if (index == 1) {
+            return _HistorySummary(count: orders.length);
+          }
+
+          if (orders.isEmpty) {
+            return const _EmptyHistoryState();
+          }
+
+          final order = orders[index - 2];
+          return OrderCard(
+            order: order,
+            showDeliveredMeta: true,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => OrderDetailsView(order: order),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
