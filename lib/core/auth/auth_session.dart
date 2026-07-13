@@ -2,28 +2,52 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../network/api_exception.dart';
+import 'auth_token_store.dart';
 import 'password_changed_notifier.dart';
 import 'session_expired_notifier.dart';
 
 enum AuthRestoreResult { restored, noSession, expired, temporaryFailure }
 
+typedef AuthNow = DateTime Function();
+typedef AuthTimerFactory =
+    Timer Function(Duration duration, void Function() callback);
+
 class AuthSession {
-  AuthSession._();
+  AuthSession._({
+    http.Client? client,
+    AuthTokenStore? tokenStore,
+    AuthNow? now,
+    AuthTimerFactory? timerFactory,
+    String? baseUrl,
+  }) : _client = client ?? http.Client(),
+       _tokenStore = tokenStore ?? SecureAuthTokenStore(),
+       _now = now ?? DateTime.now,
+       _timerFactory = timerFactory ?? _createTimer,
+       _baseUrlOverride = baseUrl;
 
   static final instance = AuthSession._();
 
-  static const _refreshKey = 'yalla_home_refresh_token';
-  static const _rememberKey = 'yalla_home_remember_session';
-  static const _expiresAtKey = 'yalla_home_session_expires_at';
-  static const _temporarySessionMarkerKey =
-      'yalla_home_temporary_session_existed';
-  static const _rememberedSessionDuration = Duration(days: 7);
-  static const _temporarySessionDuration = Duration(hours: 8);
   static const _configuredApiBaseUrl = String.fromEnvironment('API_BASE_URL');
+
+  @visibleForTesting
+  factory AuthSession.forTesting({
+    required http.Client client,
+    required AuthTokenStore tokenStore,
+    AuthNow? now,
+    AuthTimerFactory? timerFactory,
+    String baseUrl = 'http://localhost/api/v1',
+  }) {
+    return AuthSession._(
+      client: client,
+      tokenStore: tokenStore,
+      now: now,
+      timerFactory: timerFactory,
+      baseUrl: baseUrl,
+    );
+  }
 
   static String get apiBaseUrl {
     final configured = _configuredApiBaseUrl.trim();
@@ -52,15 +76,15 @@ class AuthSession {
     return uri.replace(path: path).toString();
   }
 
-  final _client = http.Client();
-  final _storage = const FlutterSecureStorage();
+  final http.Client _client;
+  final AuthTokenStore _tokenStore;
+  final AuthNow _now;
+  final AuthTimerFactory _timerFactory;
+  final String? _baseUrlOverride;
 
-  String? _accessToken;
-  String? _refreshToken;
+  StoredAuthTokens? _tokens;
   Future<void>? _refreshInFlight;
   Timer? _expiryTimer;
-  DateTime? _sessionExpiresAt;
-  bool _rememberSession = false;
   bool _sessionExpiredEventSent = false;
   bool _passwordChanged = false;
   bool _accountInactiveHandled = false;
@@ -68,52 +92,32 @@ class AuthSession {
 
   Map<String, dynamic>? currentUser;
 
-  Uri uri(String path) =>
-      Uri.parse('$apiBaseUrl/${path.replaceFirst(RegExp(r'^/+'), '')}');
+  String? get _accessToken => _tokens?.accessToken;
+
+  @visibleForTesting
+  StoredAuthTokens? get tokensForTesting => _tokens;
+
+  Uri uri(String path) => Uri.parse(
+    '${_baseUrlOverride ?? apiBaseUrl}/${path.replaceFirst(RegExp(r'^/+'), '')}',
+  );
 
   String? absoluteUrl(Object? value) {
     final text = value?.toString().trim() ?? '';
     if (text.isEmpty) return null;
     if (text.startsWith('http://') || text.startsWith('https://')) return text;
-    final root = Uri.parse(apiBaseUrl).origin;
+    final root = Uri.parse(_baseUrlOverride ?? apiBaseUrl).origin;
     return '$root/${text.replaceFirst(RegExp(r'^/+'), '')}';
   }
 
   Future<AuthRestoreResult> restore() async {
-    final rememberValue = await _storage.read(key: _rememberKey);
-    final savedRefresh = await _storage.read(key: _refreshKey);
-    final expiresAtValue = await _storage.read(key: _expiresAtKey);
-    final hadTemporarySession = await _storage.read(
-      key: _temporarySessionMarkerKey,
-    );
-
-    final hasRememberFlag = rememberValue == 'true';
-    final hasRefresh = savedRefresh != null && savedRefresh.trim().isNotEmpty;
-    final expiresAt = DateTime.tryParse(expiresAtValue ?? '')?.toUtc();
-    final hasCompleteRememberedSession =
-        hasRememberFlag && hasRefresh && expiresAt != null;
-
-    if (!hasCompleteRememberedSession) {
-      if (hasRememberFlag || hasRefresh || (expiresAtValue ?? '').isNotEmpty) {
-        await _clearRememberedStorage();
-      }
-      if (hadTemporarySession != null) {
-        await _expireSession(notify: true);
-        return AuthRestoreResult.expired;
-      }
-      return AuthRestoreResult.noSession;
-    }
-
-    await _storage.delete(key: _temporarySessionMarkerKey);
-
-    if (!_isBeforeExpiry(expiresAt)) {
+    final restoredTokens = await _tokenStore.read();
+    if (restoredTokens == null) return AuthRestoreResult.noSession;
+    if (restoredTokens.sessionHasExpired(_now().toUtc())) {
       await _expireSession(notify: true);
       return AuthRestoreResult.expired;
     }
 
-    _refreshToken = savedRefresh.trim();
-    _sessionExpiresAt = expiresAt;
-    _rememberSession = true;
+    _tokens = restoredTokens;
     _sessionExpiredEventSent = false;
     _passwordChanged = false;
     _accountInactiveHandled = false;
@@ -154,10 +158,12 @@ class AuthSession {
       body: jsonEncode({
         'identifier': cleanIdentifier,
         'password': cleanPassword,
+        'remember': remember,
       }),
     );
     final data = _decode(response);
-    await _handleAccountInactiveResponse(data);
+    _accountInactiveHandled = false;
+    await _handleAccountInactiveResponse(data, notify: false);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
         _message(
@@ -169,12 +175,18 @@ class AuthSession {
     }
 
     final map = data as Map<String, dynamic>;
-    _accessToken = map['accessToken']?.toString();
-    _refreshToken = map['refreshToken']?.toString();
-    currentUser = map['user'] as Map<String, dynamic>?;
-    if (_accessToken == null ||
-        _refreshToken == null ||
-        currentUser?['role'] != 'representative') {
+    final user = map['user'];
+    if (user is! Map || user['role'] != 'representative') {
+      await clear();
+      throw const ApiException(
+        '\u0627\u0633\u062a\u062c\u0627\u0628\u0629 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u063a\u064a\u0631 \u0645\u0643\u062a\u0645\u0644\u0629.',
+      );
+    }
+
+    late final StoredAuthTokens tokens;
+    try {
+      tokens = tokensFromApiPayload(map);
+    } on FormatException {
       await clear();
       throw const ApiException(
         '\u0627\u0633\u062a\u062c\u0627\u0628\u0629 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u063a\u064a\u0631 \u0645\u0643\u062a\u0645\u0644\u0629.',
@@ -182,29 +194,11 @@ class AuthSession {
     }
 
     _sessionVersion += 1;
-    _rememberSession = remember;
     _sessionExpiredEventSent = false;
     _passwordChanged = false;
     _accountInactiveHandled = false;
-    _sessionExpiresAt = DateTime.now().toUtc().add(
-      remember ? _rememberedSessionDuration : _temporarySessionDuration,
-    );
-    _scheduleExpiryTimer();
-
-    if (remember) {
-      await _storage.write(key: _refreshKey, value: _refreshToken);
-      await _storage.write(key: _rememberKey, value: 'true');
-      await _storage.write(
-        key: _expiresAtKey,
-        value: _sessionExpiresAt!.toIso8601String(),
-      );
-      await _storage.delete(key: _temporarySessionMarkerKey);
-    } else {
-      await _storage.delete(key: _refreshKey);
-      await _storage.delete(key: _rememberKey);
-      await _storage.delete(key: _expiresAtKey);
-      await _storage.write(key: _temporarySessionMarkerKey, value: 'true');
-    }
+    await _activateTokens(tokens);
+    currentUser = Map<String, dynamic>.from(user);
   }
 
   Future<dynamic> getJson(String path) async {
@@ -309,6 +303,7 @@ class AuthSession {
     );
     final response = await http.Response.fromStream(streamed);
     final data = _decode(response);
+    await _handleAccountInactiveResponse(data);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
         _message(
@@ -322,30 +317,34 @@ class AuthSession {
   }
 
   Future<void> logout() async {
-    final refresh = _refreshToken;
-    if (refresh != null && _accessToken != null) {
-      try {
+    try {
+      final tokens = _tokens;
+      if (tokens != null && !tokens.sessionHasExpired(_now().toUtc())) {
+        if (!tokens.hasAccessToken ||
+            tokens.accessExpiresSoon(_now().toUtc())) {
+          await _refreshOnce();
+        }
+        final active = _tokens;
+        if (active == null || !active.hasAccessToken) return;
         await _client.post(
           uri('auth/logout/'),
           headers: {
-            'Authorization': 'Bearer $_accessToken',
+            'Authorization': 'Bearer ${active.accessToken}',
             'Content-Type': 'application/json',
           },
-          body: jsonEncode({'refreshToken': refresh}),
+          body: jsonEncode({'refreshToken': active.refreshToken}),
         );
-      } catch (_) {
-        // Local logout must still complete when the network is unavailable.
       }
+    } catch (_) {
+      // Local logout must still complete when the network is unavailable.
+    } finally {
+      await clear();
     }
-    await clear();
   }
 
   Future<void> clear() async {
     _sessionVersion += 1;
-    _accessToken = null;
-    _refreshToken = null;
-    _sessionExpiresAt = null;
-    _rememberSession = false;
+    _tokens = null;
     _sessionExpiredEventSent = false;
     _passwordChanged = false;
     _accountInactiveHandled = false;
@@ -353,10 +352,12 @@ class AuthSession {
     _expiryTimer?.cancel();
     _expiryTimer = null;
     currentUser = null;
-    await _storage.delete(key: _refreshKey);
-    await _storage.delete(key: _rememberKey);
-    await _storage.delete(key: _expiresAtKey);
-    await _storage.delete(key: _temporarySessionMarkerKey);
+    await _tokenStore.clear();
+  }
+
+  Future<void> validateForForeground() async {
+    await _ensureSessionStillActive();
+    await _refreshAccessIfNeeded();
   }
 
   Future<Map<String, dynamic>> _fetchCurrentUserForRestore() async {
@@ -424,6 +425,7 @@ class AuthSession {
     required int Function(T response) statusCode,
   }) async {
     await _ensureSessionStillActive();
+    await _refreshAccessIfNeeded();
     var response = await send();
     if (response is http.Response) {
       await _handleAccountInactiveResponse(_decode(response));
@@ -433,8 +435,19 @@ class AuthSession {
       if (response is http.Response) {
         await _handleAccountInactiveResponse(_decode(response));
       }
+      if (statusCode(response) == 401) {
+        await _expireSession(notify: true);
+      }
     }
     return response;
+  }
+
+  Future<void> _refreshAccessIfNeeded() async {
+    final tokens = _tokens;
+    if (tokens == null) return;
+    if (!tokens.hasAccessToken || tokens.accessExpiresSoon(_now().toUtc())) {
+      await _refreshOnce();
+    }
   }
 
   Future<bool> _tryRefresh() async {
@@ -480,7 +493,8 @@ class AuthSession {
     }
 
     final refreshVersion = _sessionVersion;
-    final refresh = _refreshToken;
+    final current = _tokens;
+    final refresh = current?.refreshToken;
     if (refresh == null) {
       throw const ApiException(
         '\u0644\u0627 \u062a\u0648\u062c\u062f \u062c\u0644\u0633\u0629 \u0645\u062d\u0641\u0648\u0638\u0629.',
@@ -493,6 +507,7 @@ class AuthSession {
       body: jsonEncode({'refreshToken': refresh}),
     );
     final data = _decode(response);
+    await _handleAccountInactiveResponse(data);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       if (_isPasswordChangedResponse(data)) {
         throw const ApiException(_passwordChangedMessage, statusCode: 401);
@@ -506,33 +521,44 @@ class AuthSession {
       );
     }
 
-    if (refreshVersion != _sessionVersion) return;
+    if (refreshVersion != _sessionVersion) {
+      throw const ApiException(
+        '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
+      );
+    }
 
     final map = data as Map<String, dynamic>;
-    _accessToken = map['accessToken']?.toString();
-    _refreshToken = map['refreshToken']?.toString() ?? refresh;
-    if (_rememberSession) {
-      await _storage.write(key: _refreshKey, value: _refreshToken);
+    final next = tokensFromApiPayload(map);
+    _validateSessionContinuity(current!, next);
+    final activated = await _activateTokens(
+      next,
+      expectedVersion: refreshVersion,
+    );
+    if (!activated) {
+      throw const ApiException(
+        '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
+      );
     }
   }
 
-  bool _isBeforeExpiry(DateTime expiresAt) {
-    return DateTime.now().toUtc().isBefore(expiresAt);
+  void _validateSessionContinuity(
+    StoredAuthTokens current,
+    StoredAuthTokens next,
+  ) {
+    if (current.mode != next.mode ||
+        current.sessionStartedAt != next.sessionStartedAt ||
+        current.absoluteExpiresAt != next.absoluteExpiresAt) {
+      throw const FormatException('Refresh changed session identity.');
+    }
   }
 
   bool _isSessionExpired() {
-    final expiresAt = _sessionExpiresAt;
-    return expiresAt == null || !_isBeforeExpiry(expiresAt);
+    final tokens = _tokens;
+    return tokens == null || tokens.sessionHasExpired(_now().toUtc());
   }
 
   bool _isAuthenticationFailure(int? statusCode) {
     return statusCode == 400 || statusCode == 401 || statusCode == 403;
-  }
-
-  Future<void> _clearRememberedStorage() async {
-    await _storage.delete(key: _refreshKey);
-    await _storage.delete(key: _rememberKey);
-    await _storage.delete(key: _expiresAtKey);
   }
 
   Future<void> _ensureSessionStillActive() async {
@@ -547,10 +573,10 @@ class AuthSession {
 
   void _scheduleExpiryTimer() {
     _expiryTimer?.cancel();
-    final expiresAt = _sessionExpiresAt;
-    if (expiresAt == null) return;
-    final delay = expiresAt.difference(DateTime.now().toUtc());
-    _expiryTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
+    final tokens = _tokens;
+    if (tokens == null) return;
+    final delay = tokens.sessionDeadline.difference(_now().toUtc());
+    _expiryTimer = _timerFactory(delay.isNegative ? Duration.zero : delay, () {
       unawaited(_expireSession(notify: true));
     });
   }
@@ -559,22 +585,55 @@ class AuthSession {
     final shouldNotify =
         notify && !_sessionExpiredEventSent && !_passwordChanged;
     _sessionVersion += 1;
-    _accessToken = null;
-    _refreshToken = null;
-    _sessionExpiresAt = null;
-    _rememberSession = false;
+    _tokens = null;
     _refreshInFlight = null;
     _expiryTimer?.cancel();
     _expiryTimer = null;
     currentUser = null;
-    await _storage.delete(key: _refreshKey);
-    await _storage.delete(key: _rememberKey);
-    await _storage.delete(key: _expiresAtKey);
-    await _storage.delete(key: _temporarySessionMarkerKey);
+    await _tokenStore.clear();
     if (shouldNotify) {
       _sessionExpiredEventSent = true;
       SessionExpiredNotifier.instance.notifyExpired();
     }
+  }
+
+  Future<bool> _activateTokens(
+    StoredAuthTokens tokens, {
+    int? expectedVersion,
+  }) async {
+    if (expectedVersion != null && expectedVersion != _sessionVersion) {
+      return false;
+    }
+
+    final previous = _tokens;
+    _tokens = tokens;
+    _scheduleExpiryTimer();
+    try {
+      await _tokenStore.save(tokens);
+    } catch (_) {
+      if (identical(_tokens, tokens)) {
+        _tokens = previous;
+        _scheduleExpiryTimer();
+      }
+      rethrow;
+    }
+
+    if (expectedVersion != null && expectedVersion != _sessionVersion) {
+      final active = _tokens;
+      if (active == null) {
+        await _tokenStore.clear();
+      } else if (active.refreshToken != tokens.refreshToken) {
+        await _tokenStore.save(active);
+      }
+      return false;
+    }
+    return true;
+  }
+
+  @visibleForTesting
+  void disposeForTesting() {
+    _expiryTimer?.cancel();
+    _client.close();
   }
 
   dynamic _decode(http.Response response) {
@@ -590,12 +649,15 @@ class AuthSession {
     return data is Map && data['code']?.toString() == expectedCode;
   }
 
-  Future<void> _handleAccountInactiveResponse(dynamic data) async {
+  Future<void> _handleAccountInactiveResponse(
+    dynamic data, {
+    bool notify = true,
+  }) async {
     if (!_hasErrorCode(data, 'account_inactive') || _accountInactiveHandled) {
       return;
     }
     _accountInactiveHandled = true;
-    await _expireSession(notify: true);
+    await _expireSession(notify: notify);
   }
 
   bool _isPasswordChangedResponse(dynamic data) {
@@ -667,6 +729,12 @@ class AuthSession {
         '\u0647\u0630\u0627 \u062d\u0633\u0627\u0628 \u0639\u0645\u064a\u0644\u060c \u0627\u0633\u062a\u062e\u062f\u0645 \u062a\u0637\u0628\u064a\u0642 \u064a\u0644\u0627 \u0645\u0627\u0631\u0643\u062a.',
       'representative_account_required' =>
         '\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0647\u0646\u0627 \u0645\u062e\u0635\u0635 \u0644\u062d\u0633\u0627\u0628\u0627\u062a \u0627\u0644\u0645\u0646\u062f\u0648\u0628\u064a\u0646 \u0641\u0642\u0637.',
+      'account_inactive' =>
+        '\u062a\u0645 \u0625\u064a\u0642\u0627\u0641 \u062d\u0633\u0627\u0628\u0643. \u062a\u0648\u0627\u0635\u0644 \u0645\u0639 \u0627\u0644\u062f\u0639\u0645.',
+      'session_expired' =>
+        '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
+      'token_not_valid' =>
+        '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
       _ => code,
     };
   }
@@ -678,4 +746,8 @@ class AuthSession {
   static const _invalidCredentialsMessage =
       '\u0627\u0644\u0625\u064a\u0645\u064a\u0644 \u0623\u0648 \u0643\u0644\u0645\u0629 \u0627\u0644\u0633\u0631 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d\u064a\u0646.';
   static const _passwordChangedMessage = 'تم تغيير كلمة المرور.';
+}
+
+Timer _createTimer(Duration duration, void Function() callback) {
+  return Timer(duration, callback);
 }

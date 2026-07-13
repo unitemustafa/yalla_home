@@ -45,7 +45,10 @@ void main() {
     expect(fields.elementAt(1).controller?.text, isEmpty);
 
     final rememberMe = tester.widget<Checkbox>(find.byType(Checkbox));
-    expect(rememberMe.value, isTrue);
+    expect(rememberMe.value, isFalse);
+    await tester.tap(find.text('تذكرني'));
+    await tester.pump();
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
 
     final supportButton = tester.widget<TextButton>(
       find.widgetWithText(TextButton, 'الدعم الفني'),

@@ -78,6 +78,7 @@ class _CourierShellViewState extends State<CourierShellView>
 
     _refreshingRemoteState = true;
     try {
+      await AuthSession.instance.validateForForeground();
       await Future.wait([
         _loadOrders(),
         _profileController.refresh(),

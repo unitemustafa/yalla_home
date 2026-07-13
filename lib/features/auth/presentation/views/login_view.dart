@@ -24,7 +24,7 @@ class _LoginViewState extends State<LoginView> {
   late final TextEditingController _identifierController;
   late final TextEditingController _passwordController;
   bool _obscurePassword = true;
-  bool _rememberMe = true;
+  bool _rememberMe = false;
   bool _isLoading = false;
 
   @override
