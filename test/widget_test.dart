@@ -609,6 +609,36 @@ void main() {
     expect(find.text('تم إسناد طلب جديد'), findsOneWidget);
   });
 
+  testWidgets('visible delete button removes a courier notification', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeNotificationsApi(
+      notifications: [_notification(id: '1', orderId: '123')],
+      unreadCount: 1,
+    );
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: CourierNotificationsView(
+          controller: CourierNotificationsController(api: api),
+          ordersApi: _FakeOrdersApi(),
+          onOrderTap: (_) {},
+          onUnreadCountChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(
+      find.byKey(const ValueKey('courier_notification_delete_1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.deleteCalls, ['1']);
+    expect(find.byKey(const ValueKey('courier_notification_1')), findsNothing);
+  });
+
   testWidgets('opening linked order loads the real courier order', (
     WidgetTester tester,
   ) async {

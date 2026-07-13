@@ -52,6 +52,7 @@ class CustomSnackBar {
     required BuildContext context,
     required String title,
     String? message,
+    ScaffoldMessengerState? messenger,
   }) {
     _show(
       context: context,
@@ -59,6 +60,7 @@ class CustomSnackBar {
       message: message,
       icon: AppIcons.info_circle,
       accentColor: AppColors.info,
+      messenger: messenger,
     );
   }
 
@@ -68,12 +70,14 @@ class CustomSnackBar {
     required IconData icon,
     required Color accentColor,
     String? message,
+    ScaffoldMessengerState? messenger,
   }) {
     final theme = Theme.of(context);
     final hasMessage = message != null && message.trim().isNotEmpty;
 
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
+    final targetMessenger = messenger ?? ScaffoldMessenger.of(context);
+    targetMessenger.clearSnackBars();
+    targetMessenger.showSnackBar(
       SnackBar(
         elevation: 0,
         behavior: SnackBarBehavior.floating,

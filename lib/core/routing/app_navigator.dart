@@ -6,6 +6,7 @@ class AppNavigator {
   AppNavigator._();
 
   static final key = GlobalKey<NavigatorState>();
+  static final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
   static void goToLogin() {
     key.currentState?.pushNamedAndRemoveUntil(

@@ -74,7 +74,7 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
     try {
       await _controller.deleteNotification(notification);
       if (!mounted) return true;
-      CustomSnackBar.showError(context: context, title: 'تم حذف الإشعار');
+      CustomSnackBar.showSuccess(context: context, title: 'تم حذف الإشعار');
       return true;
     } catch (error) {
       if (!mounted) return false;
@@ -253,6 +253,7 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
                                     notification,
                                   ),
                                   onTap: () => _openNotification(notification),
+                                  onDelete: () => _confirmDelete(notification),
                                 ),
                               ),
                             ),
@@ -404,12 +405,14 @@ class _NotificationCard extends StatelessWidget {
     required this.isDark,
     required this.isDeleting,
     required this.onTap,
+    required this.onDelete,
   });
 
   final CourierNotification data;
   final bool isDark;
   final bool isDeleting;
   final VoidCallback onTap;
+  final Future<bool> Function() onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -475,6 +478,30 @@ class _NotificationCard extends StatelessWidget {
                               shape: BoxShape.circle,
                             ),
                           ),
+                        IconButton(
+                          key: ValueKey(
+                            'courier_notification_delete_${data.id}',
+                          ),
+                          tooltip: 'حذف الإشعار',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: isDeleting
+                              ? null
+                              : () async {
+                                  await onDelete();
+                                },
+                          icon: isDeleting
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  AppIcons.trash,
+                                  size: 19,
+                                  color: AppColors.error,
+                                ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),

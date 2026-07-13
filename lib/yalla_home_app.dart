@@ -1,15 +1,34 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/constants/app_constants.dart';
 import 'core/auth/password_changed_notifier.dart';
 import 'core/auth/session_expired_notifier.dart';
 import 'core/presentation/widgets/offline_connection_banner.dart';
+import 'core/presentation/widgets/snackbars/custom_snackbar.dart';
+import 'core/notifications/courier_push_service.dart';
 import 'core/routing/app_navigator.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/app_routes.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_theme_controller.dart';
+
+@visibleForTesting
+Future<bool> presentCourierForegroundFeedback(
+  CourierPushEvent event, {
+  required Future<void> Function(CourierPushEvent event) showBanner,
+}) async {
+  if (event.opened ||
+      event.event.isEmpty ||
+      event.event == 'courier_account_disabled') {
+    return false;
+  }
+  await showBanner(event);
+  return true;
+}
 
 class YallaHomeApp extends StatefulWidget {
   const YallaHomeApp({super.key});
@@ -21,19 +40,48 @@ class YallaHomeApp extends StatefulWidget {
 class _YallaHomeAppState extends State<YallaHomeApp> {
   int _handledSessionExpiredEventId = 0;
   int _handledPasswordChangedEventId = 0;
+  StreamSubscription<CourierPushEvent>? _pushSubscription;
 
   @override
   void initState() {
     super.initState();
     SessionExpiredNotifier.instance.addListener(_handleSessionExpired);
     PasswordChangedNotifier.instance.addListener(_handlePasswordChanged);
+    _pushSubscription = CourierPushService.instance.events.listen(
+      (event) => unawaited(_handleCourierPushEvent(event)),
+    );
   }
 
   @override
   void dispose() {
     SessionExpiredNotifier.instance.removeListener(_handleSessionExpired);
     PasswordChangedNotifier.instance.removeListener(_handlePasswordChanged);
+    _pushSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _handleCourierPushEvent(CourierPushEvent event) {
+    return presentCourierForegroundFeedback(
+      event,
+      showBanner: _showCourierNotificationBanner,
+    );
+  }
+
+  Future<void> _showCourierNotificationBanner(CourierPushEvent event) async {
+    final currentContext = AppNavigator.key.currentContext;
+    final messenger = AppNavigator.scaffoldMessengerKey.currentState;
+    if (currentContext == null || messenger == null) return;
+    CustomSnackBar.showInfo(
+      context: currentContext,
+      messenger: messenger,
+      title: event.title,
+      message: event.body,
+    );
+    try {
+      await HapticFeedback.vibrate();
+    } catch (_) {
+      // Haptic feedback is optional and must not block notification display.
+    }
   }
 
   void _handlePasswordChanged() {
@@ -193,6 +241,7 @@ class _YallaHomeAppState extends State<YallaHomeApp> {
       builder: (context, themeMode, _) {
         return MaterialApp(
           navigatorKey: AppNavigator.key,
+          scaffoldMessengerKey: AppNavigator.scaffoldMessengerKey,
           debugShowCheckedModeBanner: false,
           title: AppConstants.appName,
           theme: AppTheme.lightTheme,

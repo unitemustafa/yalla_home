@@ -23,6 +23,37 @@ class CourierPushEvent {
   final Map<String, dynamic> data;
   final bool opened;
   String get event => data['event']?.toString() ?? '';
+
+  String get title {
+    final remoteTitle = data['_title']?.toString().trim() ?? '';
+    if (remoteTitle.isNotEmpty) return remoteTitle;
+    return switch (event) {
+      'courier_order_assigned' => 'طلب توصيل جديد',
+      'courier_order_unassigned' => 'تم سحب طلب',
+      'courier_order_cancelled' => 'تم إلغاء طلب',
+      'courier_account_restored' => 'تم استعادة حسابك',
+      'courier_profile_updated' => 'تم تحديث بيانات حسابك',
+      'courier_availability_changed' => 'تحديث حالة استقبال الطلبات',
+      _ => 'تحديث من يلا ماركت',
+    };
+  }
+
+  String get body {
+    final remoteBody = data['_body']?.toString().trim() ?? '';
+    if (remoteBody.isNotEmpty) return remoteBody;
+    final number = data['order_number'] ?? data['order_id'] ?? '';
+    return switch (event) {
+      'courier_order_assigned' =>
+        'تم تعيين الطلب #$number لك. اضغط لعرض التفاصيل.',
+      'courier_order_unassigned' => 'تم سحب الطلب #$number من قائمة مهامك.',
+      'courier_order_cancelled' => 'تم إلغاء الطلب #$number.',
+      'courier_account_restored' =>
+        'تم استعادة حساب المندوب بواسطة فريق دعم يلا ماركت.',
+      'courier_profile_updated' => 'تم تحديث بيانات المندوب.',
+      'courier_availability_changed' => 'تم تحديث حالة استقبال الطلبات.',
+      _ => 'تم تحديث بيانات حساب المندوب.',
+    };
+  }
 }
 
 class CourierPushService {
@@ -149,6 +180,8 @@ class CourierPushService {
         accountUpdatesChannelId,
         'تحديثات الحساب',
         importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
       ),
     );
     await android?.createNotificationChannel(
@@ -156,6 +189,8 @@ class CourierPushService {
         courierUpdatesChannelId,
         'تحديثات المندوب',
         importance: Importance.defaultImportance,
+        playSound: true,
+        enableVibration: true,
       ),
     );
   }
@@ -224,8 +259,9 @@ class CourierPushService {
         : channel == accountUpdatesChannelId
         ? 'تحديثات الحساب'
         : 'تحديثات المندوب';
-    final title = data['_title']?.toString() ?? _defaultTitle(event);
-    final body = data['_body']?.toString() ?? _defaultBody(event, data);
+    final pushEvent = CourierPushEvent(data, opened: false);
+    final title = pushEvent.title;
+    final body = pushEvent.body;
     await _local.show(
       id:
           int.tryParse(data['notification_id']?.toString() ?? '') ??
@@ -243,6 +279,13 @@ class CourierPushService {
               ? Priority.defaultPriority
               : Priority.high,
           icon: 'ic_notification',
+          playSound: true,
+          enableVibration: true,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
         ),
       ),
       payload: jsonEncode(data),
@@ -265,27 +308,6 @@ class CourierPushService {
     _disablingAccount = true;
     await AuthSession.instance.clear();
     AppNavigator.goToLogin();
-  }
-
-  String _defaultTitle(String event) => switch (event) {
-    'courier_order_assigned' => 'طلب توصيل جديد',
-    'courier_order_unassigned' => 'تم سحب طلب',
-    'courier_order_cancelled' => 'تم إلغاء طلب',
-    'courier_account_restored' => 'تم استعادة حسابك',
-    _ => 'تحديث من يلا ماركت',
-  };
-
-  String _defaultBody(String event, Map<String, dynamic> data) {
-    final number = data['order_number'] ?? data['order_id'] ?? '';
-    return switch (event) {
-      'courier_order_assigned' =>
-        'تم تعيين الطلب #$number لك. اضغط لعرض التفاصيل.',
-      'courier_order_unassigned' => 'تم سحب الطلب #$number من قائمة مهامك.',
-      'courier_order_cancelled' => 'تم إلغاء الطلب #$number.',
-      'courier_account_restored' =>
-        'تم استعادة حساب المندوب بواسطة فريق دعم يلا ماركت.',
-      _ => 'تم تحديث بيانات حساب المندوب.',
-    };
   }
 
   Future<void> dispose() async {
