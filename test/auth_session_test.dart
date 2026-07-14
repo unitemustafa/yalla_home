@@ -274,6 +274,65 @@ void main() {
     expect(session.currentUser, isNull);
   });
 
+  test('transient refresh failure preserves the active session', () async {
+    final store = InMemoryAuthTokenStore();
+    final session = AuthSession.forTesting(
+      tokenStore: store,
+      now: () => base,
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/login/representative/')) {
+          return _response(_payload(base, remembered: false));
+        }
+        if (request.url.path.endsWith('/refresh/')) {
+          throw http.ClientException('offline', request.url);
+        }
+        return _response({'code': 'token_not_valid'}, statusCode: 401);
+      }),
+    );
+    addTearDown(session.disposeForTesting);
+    await session.login(
+      identifier: 'captain@example.com',
+      password: 'Secret123!',
+      remember: false,
+    );
+
+    await expectLater(
+      session.getJson('courier/orders/'),
+      throwsA(isA<ApiException>()),
+    );
+
+    expect(store.tokens, isNotNull);
+    expect(session.tokensForTesting, isNotNull);
+    expect(session.currentUser?['role'], 'representative');
+  });
+
+  test('network requests fail with a readable timeout', () async {
+    final session = AuthSession.forTesting(
+      tokenStore: InMemoryAuthTokenStore(),
+      requestTimeout: const Duration(milliseconds: 5),
+      client: MockClient((_) async {
+        await Future<void>.delayed(const Duration(seconds: 1));
+        return _response(const <String, dynamic>{});
+      }),
+    );
+    addTearDown(session.disposeForTesting);
+
+    await expectLater(
+      session.login(
+        identifier: 'captain@example.com',
+        password: 'Secret123!',
+        remember: false,
+      ),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.message,
+          'message',
+          contains('مهلة الاتصال'),
+        ),
+      ),
+    );
+  });
+
   test('temporary session is cleared at the exact eight-hour deadline', () {
     fakeAsync((async) {
       final store = InMemoryAuthTokenStore();

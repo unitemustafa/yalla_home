@@ -241,9 +241,16 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
                                 key: ValueKey(
                                   'courier_notification_${notification.id}',
                                 ),
-                                direction: DismissDirection.endToStart,
+                                direction: DismissDirection.horizontal,
                                 background:
-                                    const _NotificationDismissBackground(),
+                                    const _NotificationDismissBackground(
+                                      alignment:
+                                          AlignmentDirectional.centerStart,
+                                    ),
+                                secondaryBackground:
+                                    const _NotificationDismissBackground(
+                                      alignment: AlignmentDirectional.centerEnd,
+                                    ),
                                 confirmDismiss: (_) =>
                                     _confirmDelete(notification),
                                 child: _NotificationCard(
@@ -253,7 +260,6 @@ class _CourierNotificationsViewState extends State<CourierNotificationsView> {
                                     notification,
                                   ),
                                   onTap: () => _openNotification(notification),
-                                  onDelete: () => _confirmDelete(notification),
                                 ),
                               ),
                             ),
@@ -405,14 +411,12 @@ class _NotificationCard extends StatelessWidget {
     required this.isDark,
     required this.isDeleting,
     required this.onTap,
-    required this.onDelete,
   });
 
   final CourierNotification data;
   final bool isDark;
   final bool isDeleting;
   final VoidCallback onTap;
-  final Future<bool> Function() onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -478,30 +482,6 @@ class _NotificationCard extends StatelessWidget {
                               shape: BoxShape.circle,
                             ),
                           ),
-                        IconButton(
-                          key: ValueKey(
-                            'courier_notification_delete_${data.id}',
-                          ),
-                          tooltip: 'حذف الإشعار',
-                          visualDensity: VisualDensity.compact,
-                          onPressed: isDeleting
-                              ? null
-                              : () async {
-                                  await onDelete();
-                                },
-                          icon: isDeleting
-                              ? const SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(
-                                  AppIcons.trash,
-                                  size: 19,
-                                  color: AppColors.error,
-                                ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -746,17 +726,19 @@ class _NotificationMetaRow extends StatelessWidget {
 }
 
 class _NotificationDismissBackground extends StatelessWidget {
-  const _NotificationDismissBackground();
+  const _NotificationDismissBackground({required this.alignment});
+
+  final AlignmentGeometry alignment;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsetsDirectional.only(end: 22),
+      padding: const EdgeInsets.symmetric(horizontal: 22),
       decoration: BoxDecoration(
         color: AppColors.error,
         borderRadius: BorderRadius.circular(8),
       ),
-      alignment: AlignmentDirectional.centerEnd,
+      alignment: alignment,
       child: const Icon(AppIcons.trash, color: Colors.white, size: 24),
     );
   }

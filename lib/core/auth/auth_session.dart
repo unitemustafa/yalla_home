@@ -21,11 +21,13 @@ class AuthSession {
     AuthTokenStore? tokenStore,
     AuthNow? now,
     AuthTimerFactory? timerFactory,
+    Duration requestTimeout = const Duration(seconds: 20),
     String? baseUrl,
   }) : _client = client ?? http.Client(),
        _tokenStore = tokenStore ?? SecureAuthTokenStore(),
        _now = now ?? DateTime.now,
        _timerFactory = timerFactory ?? _createTimer,
+       _requestTimeout = requestTimeout,
        _baseUrlOverride = baseUrl;
 
   static final instance = AuthSession._();
@@ -38,6 +40,7 @@ class AuthSession {
     required AuthTokenStore tokenStore,
     AuthNow? now,
     AuthTimerFactory? timerFactory,
+    Duration requestTimeout = const Duration(seconds: 20),
     String baseUrl = 'http://localhost/api/v1',
   }) {
     return AuthSession._(
@@ -45,6 +48,7 @@ class AuthSession {
       tokenStore: tokenStore,
       now: now,
       timerFactory: timerFactory,
+      requestTimeout: requestTimeout,
       baseUrl: baseUrl,
     );
   }
@@ -80,6 +84,7 @@ class AuthSession {
   final AuthTokenStore _tokenStore;
   final AuthNow _now;
   final AuthTimerFactory _timerFactory;
+  final Duration _requestTimeout;
   final String? _baseUrlOverride;
 
   StoredAuthTokens? _tokens;
@@ -152,14 +157,16 @@ class AuthSession {
   }) async {
     final cleanIdentifier = _removeWhitespace(identifier);
     final cleanPassword = _removeWhitespace(password);
-    final response = await _client.post(
-      uri('auth/login/representative/'),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'identifier': cleanIdentifier,
-        'password': cleanPassword,
-        'remember': remember,
-      }),
+    final response = await _withRequestTimeout(
+      _client.post(
+        uri('auth/login/representative/'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'identifier': cleanIdentifier,
+          'password': cleanPassword,
+          'remember': remember,
+        }),
+      ),
     );
     final data = _decode(response);
     _accountInactiveHandled = false;
@@ -273,35 +280,39 @@ class AuthSession {
     return data;
   }
 
-  Future<dynamic> postMultipart(
+  Future<dynamic> patchMultipart(
     String path, {
-    String? note,
+    required Map<String, String> fields,
     List<int>? proofBytes,
     String? proofName,
   }) async {
     Future<http.StreamedResponse> send() async {
-      final request = http.MultipartRequest('POST', uri(path));
+      final request = http.MultipartRequest('PATCH', uri(path));
       request.headers['Authorization'] = 'Bearer $_accessToken';
-      if (note != null && note.trim().isNotEmpty) {
-        request.fields['note'] = note.trim();
-      }
+      request.fields.addAll(fields);
       if (proofBytes != null && proofName != null) {
         request.files.add(
           http.MultipartFile.fromBytes(
-            'proof',
+            'delivery_proof',
             proofBytes,
             filename: proofName,
           ),
         );
       }
-      return request.send();
+      return _withRequestTimeout(
+        request.send(),
+        timeout: const Duration(seconds: 45),
+      );
     }
 
     final streamed = await _sendWithRefresh<http.StreamedResponse>(
       send: send,
       statusCode: (response) => response.statusCode,
     );
-    final response = await http.Response.fromStream(streamed);
+    final response = await _withRequestTimeout(
+      http.Response.fromStream(streamed),
+      timeout: const Duration(seconds: 45),
+    );
     final data = _decode(response);
     await _handleAccountInactiveResponse(data);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -326,13 +337,15 @@ class AuthSession {
         }
         final active = _tokens;
         if (active == null || !active.hasAccessToken) return;
-        await _client.post(
-          uri('auth/logout/'),
-          headers: {
-            'Authorization': 'Bearer ${active.accessToken}',
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({'refreshToken': active.refreshToken}),
+        await _withRequestTimeout(
+          _client.post(
+            uri('auth/logout/'),
+            headers: {
+              'Authorization': 'Bearer ${active.accessToken}',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'refreshToken': active.refreshToken}),
+          ),
         );
       }
     } catch (_) {
@@ -379,9 +392,11 @@ class AuthSession {
   }
 
   Future<http.Response> _authorizedGet(String path) {
-    return _client.get(
-      uri(path),
-      headers: {'Authorization': 'Bearer $_accessToken'},
+    return _withRequestTimeout(
+      _client.get(
+        uri(path),
+        headers: {'Authorization': 'Bearer $_accessToken'},
+      ),
     );
   }
 
@@ -389,13 +404,15 @@ class AuthSession {
     String path,
     Map<String, dynamic> body,
   ) {
-    return _client.post(
-      uri(path),
-      headers: {
-        'Authorization': 'Bearer $_accessToken',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(body),
+    return _withRequestTimeout(
+      _client.post(
+        uri(path),
+        headers: {
+          'Authorization': 'Bearer $_accessToken',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      ),
     );
   }
 
@@ -403,20 +420,24 @@ class AuthSession {
     String path,
     Map<String, dynamic> body,
   ) {
-    return _client.patch(
-      uri(path),
-      headers: {
-        'Authorization': 'Bearer $_accessToken',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(body),
+    return _withRequestTimeout(
+      _client.patch(
+        uri(path),
+        headers: {
+          'Authorization': 'Bearer $_accessToken',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      ),
     );
   }
 
   Future<http.Response> _authorizedDelete(String path) {
-    return _client.delete(
-      uri(path),
-      headers: {'Authorization': 'Bearer $_accessToken'},
+    return _withRequestTimeout(
+      _client.delete(
+        uri(path),
+        headers: {'Authorization': 'Bearer $_accessToken'},
+      ),
     );
   }
 
@@ -457,10 +478,11 @@ class AuthSession {
     } on ApiException catch (error) {
       final passwordChanged = error.message == _passwordChangedMessage;
       if (passwordChanged) _notifyPasswordChanged();
-      await _expireSession(notify: !passwordChanged);
+      if (passwordChanged || _isAuthenticationFailure(error.statusCode)) {
+        await _expireSession(notify: !passwordChanged);
+      }
       return false;
     } catch (_) {
-      await _expireSession(notify: true);
       return false;
     }
   }
@@ -501,10 +523,12 @@ class AuthSession {
       );
     }
 
-    final response = await _client.post(
-      uri('auth/refresh/'),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({'refreshToken': refresh}),
+    final response = await _withRequestTimeout(
+      _client.post(
+        uri('auth/refresh/'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'refreshToken': refresh}),
+      ),
     );
     final data = _decode(response);
     await _handleAccountInactiveResponse(data);
@@ -559,6 +583,23 @@ class AuthSession {
 
   bool _isAuthenticationFailure(int? statusCode) {
     return statusCode == 400 || statusCode == 401 || statusCode == 403;
+  }
+
+  Future<T> _withRequestTimeout<T>(
+    Future<T> request, {
+    Duration? timeout,
+  }) async {
+    try {
+      return await request.timeout(timeout ?? _requestTimeout);
+    } on TimeoutException {
+      throw const ApiException(
+        '\u0627\u0646\u062a\u0647\u062a \u0645\u0647\u0644\u0629 \u0627\u0644\u0627\u062a\u0635\u0627\u0644. \u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u0625\u0646\u062a\u0631\u0646\u062a \u0648\u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.',
+      );
+    } on http.ClientException {
+      throw const ApiException(
+        '\u062a\u0639\u0630\u0631 \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0628\u0627\u0644\u062e\u0627\u062f\u0645. \u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.',
+      );
+    }
   }
 
   Future<void> _ensureSessionStillActive() async {

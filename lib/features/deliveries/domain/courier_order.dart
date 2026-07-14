@@ -234,7 +234,7 @@ class CourierOrder {
           cityName ??
           'العنوان غير محدد',
       addressLabel: label,
-      area: areaName ?? cityName ?? 'غير محدد',
+      area: areaName ?? manualArea ?? cityName ?? manualCity ?? 'غير محدد',
       total: _number(json['total_price']),
       deliveryPrice: _optionalNumber(json['delivery_price']),
       status: status,

@@ -41,6 +41,7 @@ class _CourierShellViewState extends State<CourierShellView>
   StreamSubscription<CourierPushEvent>? _pushSubscription;
   Timer? _pushRefreshDebounce;
   bool _refreshingRemoteState = false;
+  Future<void>? _ordersLoadInFlight;
 
   @override
   void initState() {
@@ -143,9 +144,24 @@ class _CourierShellViewState extends State<CourierShellView>
   }
 
   Future<void> _loadOrders() async {
+    final activeLoad = _ordersLoadInFlight;
+    if (activeLoad != null) return activeLoad;
+
+    final loadFuture = _performLoadOrders();
+    _ordersLoadInFlight = loadFuture;
+    try {
+      await loadFuture;
+    } finally {
+      if (identical(_ordersLoadInFlight, loadFuture)) {
+        _ordersLoadInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _performLoadOrders() async {
     if (mounted) {
       setState(() {
-        _loading = true;
+        if (_orders.isEmpty) _loading = true;
         _loadError = null;
       });
     }
@@ -156,14 +172,17 @@ class _CourierShellViewState extends State<CourierShellView>
         _orders = orders;
         _loading = false;
       });
-      unawaited(_refreshUnreadNotificationCount());
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _loadError = error.toString();
+        if (_orders.isEmpty) _loadError = error.toString();
       });
     }
+  }
+
+  Future<void> _refreshOrdersAndUnread() async {
+    await Future.wait([_loadOrders(), _refreshUnreadNotificationCount()]);
   }
 
   Future<CourierOrder> _markPickedUp(String orderId) async {
@@ -178,7 +197,12 @@ class _CourierShellViewState extends State<CourierShellView>
     String orderId,
     DeliveryConfirmationResult result,
   ) async {
-    final delivered = await _api.markDelivered(orderId, note: result.note);
+    final delivered = await _api.markDelivered(
+      orderId,
+      note: result.note,
+      proofBytes: result.proofBytes,
+      proofName: result.proofName,
+    );
     if (!mounted) return delivered;
     setState(() {
       _replaceOrder(delivered);
@@ -213,13 +237,13 @@ class _CourierShellViewState extends State<CourierShellView>
         orders: _activeOrders,
         onPickedUp: _markPickedUp,
         onDelivered: _markDelivered,
-        onRefresh: _loadOrders,
+        onRefresh: _refreshOrdersAndUnread,
         unreadNotificationCount: _unreadNotificationCount,
         onNotificationsPressed: _openNotifications,
       ),
       DeliveredHistoryView(
         orders: _deliveredOrders,
-        onRefresh: _loadOrders,
+        onRefresh: _refreshOrdersAndUnread,
         unreadNotificationCount: _unreadNotificationCount,
         onNotificationsPressed: _openNotifications,
       ),
@@ -259,8 +283,9 @@ class _CourierShellViewState extends State<CourierShellView>
       bottomNavigationBar: _CourierBottomNavigationBar(
         selectedIndex: _selectedIndex,
         onSelected: (index) {
+          if (_selectedIndex == index) return;
           setState(() => _selectedIndex = index);
-          if (index == 2) unawaited(_refreshRemoteState());
+          if (index == 2) unawaited(_profileController.refresh());
         },
       ),
     );

@@ -24,7 +24,7 @@ class _LoginViewState extends State<LoginView> {
   late final TextEditingController _identifierController;
   late final TextEditingController _passwordController;
   bool _obscurePassword = true;
-  bool _rememberMe = false;
+  bool _rememberMe = true;
   bool _isLoading = false;
 
   @override
@@ -464,6 +464,8 @@ class _LoginHeader extends StatelessWidget {
             child: Image.asset(
               AppAssets.themedLogo(isDarkMode: isDark),
               fit: BoxFit.cover,
+              cacheWidth: 192,
+              cacheHeight: 192,
             ),
           ),
         ),

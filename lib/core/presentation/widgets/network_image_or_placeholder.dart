@@ -28,8 +28,11 @@ class NetworkImageOrPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final cacheWidth = _cacheExtent(width, devicePixelRatio);
+    final cacheHeight = _cacheExtent(height, devicePixelRatio);
     final value = url?.trim() ?? '';
-    if (value.isEmpty) return _placeholder();
+    if (value.isEmpty) return _placeholder(cacheWidth, cacheHeight);
 
     return Image.network(
       value,
@@ -39,11 +42,23 @@ class NetworkImageOrPlaceholder extends StatelessWidget {
       fit: fit,
       alignment: alignment,
       semanticLabel: semanticLabel,
-      errorBuilder: (_, _, _) => _placeholder(),
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
+      errorBuilder: (_, _, _) => _placeholder(cacheWidth, cacheHeight),
     );
   }
 
-  Widget _placeholder() {
+  int? _cacheExtent(double? logicalExtent, double devicePixelRatio) {
+    if (logicalExtent == null ||
+        !logicalExtent.isFinite ||
+        logicalExtent <= 0) {
+      return null;
+    }
+    final physicalExtent = (logicalExtent * devicePixelRatio).round();
+    return physicalExtent < 1 ? 1 : physicalExtent;
+  }
+
+  Widget _placeholder(int? cacheWidth, int? cacheHeight) {
     return Image.asset(
       placeholderAsset,
       key: placeholderKey,
@@ -52,6 +67,8 @@ class NetworkImageOrPlaceholder extends StatelessWidget {
       fit: fit,
       alignment: alignment,
       semanticLabel: semanticLabel,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
     );
   }
 }

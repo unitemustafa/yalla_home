@@ -1,12 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/icons/app_icons.dart';
 import '../../../../core/presentation/widgets/app_action_button.dart';
 
 class DeliveryConfirmationResult {
-  const DeliveryConfirmationResult({this.note});
+  const DeliveryConfirmationResult({
+    this.note,
+    this.proofBytes,
+    this.proofName,
+  });
 
   final String? note;
+  final List<int>? proofBytes;
+  final String? proofName;
 }
 
 class DeliveryConfirmationSheet extends StatefulWidget {
@@ -21,6 +30,15 @@ class DeliveryConfirmationSheet extends StatefulWidget {
 
 class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
   final _noteController = TextEditingController();
+  final _imagePicker = ImagePicker();
+  XFile? _proof;
+  bool _readingProof = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreLostProof());
+  }
 
   @override
   void dispose() {
@@ -29,11 +47,63 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
   }
 
   Future<void> _confirm() async {
+    if (_readingProof) return;
+    setState(() => _readingProof = true);
     final note = _noteController.text.trim();
+    final proof = _proof;
+    List<int>? proofBytes;
+    if (proof != null) {
+      try {
+        proofBytes = await proof.readAsBytes();
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _readingProof = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر قراءة صورة إثبات التسليم.')),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
     Navigator.pop(
       context,
-      DeliveryConfirmationResult(note: note.isEmpty ? null : note),
+      DeliveryConfirmationResult(
+        note: note.isEmpty ? null : note,
+        proofBytes: proofBytes,
+        proofName: proof?.name,
+      ),
     );
+  }
+
+  Future<void> _takeProofPhoto() async {
+    try {
+      final proof = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 72,
+        maxWidth: 1600,
+        maxHeight: 1600,
+      );
+      if (!mounted || proof == null) return;
+      setState(() => _proof = proof);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تعذر فتح الكاميرا. تحقق من الإذن وحاول مرة أخرى.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _restoreLostProof() async {
+    try {
+      final response = await _imagePicker.retrieveLostData();
+      final files = response.files;
+      if (!mounted || files == null || files.isEmpty) return;
+      setState(() => _proof = files.first);
+    } catch (_) {
+      // The proof remains optional when Android cannot restore a camera result.
+    }
   }
 
   @override
@@ -85,7 +155,7 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'أضف ملاحظة التسليم لطلب ${widget.orderId}.',
+                  'أضف صورة أو ملاحظة تسليم للطلب ${widget.orderId}.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: mutedColor,
                     fontWeight: FontWeight.w700,
@@ -102,11 +172,40 @@ class _DeliveryConfirmationSheetState extends State<DeliveryConfirmationSheet> {
                     alignLabelWithHint: true,
                   ),
                 ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const ValueKey('delivery-proof-capture-button'),
+                    onPressed: _readingProof ? null : _takeProofPhoto,
+                    icon: Icon(
+                      _proof == null
+                          ? Icons.camera_alt_rounded
+                          : Icons.check_circle_rounded,
+                    ),
+                    label: Text(
+                      _proof == null
+                          ? 'التقاط صورة إثبات التسليم'
+                          : 'تم التقاط الصورة — إعادة الالتقاط',
+                    ),
+                  ),
+                ),
+                if (_proof != null)
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton.icon(
+                      onPressed: _readingProof
+                          ? null
+                          : () => setState(() => _proof = null),
+                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                      label: const Text('حذف الصورة'),
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 AppActionButton(
-                  label: 'تأكيد',
+                  label: _readingProof ? 'جاري التجهيز...' : 'تأكيد',
                   icon: AppIcons.tick_circle,
-                  onPressed: _confirm,
+                  onPressed: _readingProof ? null : _confirm,
                 ),
               ],
             ),

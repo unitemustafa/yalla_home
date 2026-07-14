@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:yalla_home/core/theme/app_theme_controller.dart';
+import 'package:yalla_home/core/constants/app_assets.dart';
+import 'package:yalla_home/core/presentation/widgets/network_image_or_placeholder.dart';
 import 'package:yalla_home/features/deliveries/data/courier_notifications_api.dart';
 import 'package:yalla_home/features/deliveries/data/courier_orders_api.dart';
 import 'package:yalla_home/features/deliveries/data/courier_profile_api.dart';
@@ -45,10 +47,10 @@ void main() {
     expect(fields.elementAt(1).controller?.text, isEmpty);
 
     final rememberMe = tester.widget<Checkbox>(find.byType(Checkbox));
-    expect(rememberMe.value, isFalse);
+    expect(rememberMe.value, isTrue);
     await tester.tap(find.text('تذكرني'));
     await tester.pump();
-    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
 
     final supportButton = tester.widget<TextButton>(
       find.widgetWithText(TextButton, 'الدعم الفني'),
@@ -115,6 +117,39 @@ void main() {
     expect(find.text('---'), findsOneWidget);
   });
 
+  testWidgets('delivered card fits compact iPhone width with larger text', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(8),
+            child: OrderCard(
+              order: _order(
+                status: CourierOrderStatus.delivered,
+                expectedDeliveryAt: DateTime(2026, 6, 15, 12, 43),
+                deliveredAt: DateTime(2026, 6, 15, 12, 43),
+              ),
+              showDeliveredMeta: true,
+              onTap: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('وقت التسليم'), findsOneWidget);
+    expect(find.text('845 جنيه'), findsOneWidget);
+  });
+
   test('parses delivered_at before delivered history events', () {
     final order = CourierOrder.fromJson({
       'id': 'YM-1',
@@ -160,6 +195,20 @@ void main() {
     });
 
     expect(order.deliveredAt, isNull);
+  });
+
+  test('uses manual delivery area before the generic area fallback', () {
+    final order = CourierOrder.fromJson({
+      'id': 'YM-1',
+      'status': 'delivered',
+      'created_at': '2026-07-14T05:00:00Z',
+      'delivery_address': {
+        'manual_area': 'منطقة اختبار الإطلاق',
+        'manual_city': 'القاهرة',
+      },
+    });
+
+    expect(order.area, 'منطقة اختبار الإطلاق');
   });
 
   test('parses authoritative courier statuses and safe legacy statuses', () {
@@ -209,7 +258,7 @@ void main() {
   });
 
   testWidgets(
-    'delivery confirmation accepts optional notes and has no proof controls',
+    'delivery confirmation accepts optional notes and offers camera proof',
     (WidgetTester tester) async {
       DeliveryConfirmationResult? result;
 
@@ -224,9 +273,17 @@ void main() {
       await tester.tap(find.text('فتح تأكيد التسليم'));
       await tester.pumpAndSettle();
 
-      expect(find.text('كاميرا'), findsNothing);
+      expect(find.text('التقاط صورة إثبات التسليم'), findsOneWidget);
       expect(find.text('المعرض'), findsNothing);
       expect(find.text('لا توجد صورة مرفوعة'), findsNothing);
+      expect(
+        tester
+            .getSize(
+              find.byKey(const ValueKey('delivery-proof-capture-button')),
+            )
+            .width,
+        greaterThan(300),
+      );
 
       await tester.tap(find.text('تأكيد'));
       await tester.pumpAndSettle();
@@ -246,7 +303,7 @@ void main() {
     },
   );
 
-  test('delivery confirmation API uses JSON status update without proof', () {
+  test('delivery confirmation API supports JSON and multipart updates', () {
     final source = File(
       'lib/features/deliveries/data/courier_orders_api.dart',
     ).readAsStringSync();
@@ -259,26 +316,29 @@ void main() {
       contains('if (deliveryNote != null && deliveryNote.isNotEmpty)'),
     );
     expect(source, isNot(contains('DeliveryProof')));
-    expect(source, isNot(contains('patchMultipart')));
+    expect(source, contains('patchMultipart'));
+    expect(source, contains('proofBytes'));
+    expect(source, contains('proofName'));
     expect(source, isNot(contains('deliveryProof')));
   });
 
-  test(
-    'order details exposes enabled contact and disabled map action only',
-    () {
-      final source = File(
-        'lib/features/deliveries/presentation/views/order_details_view.dart',
-      ).readAsStringSync();
+  test('order details exposes enabled contact and customer map actions', () {
+    final source = File(
+      'lib/features/deliveries/presentation/views/order_details_view.dart',
+    ).readAsStringSync();
 
-      expect(source, contains("label: const Text('تواصل')"));
-      expect(source, contains('onPressed: () => _showContactOptions(context)'));
-      expect(source, contains('onPressed: null'));
-      expect(source, contains("label: const Text('الخريطة')"));
-      expect(source, isNot(contains('_openMap')));
-      expect(source, isNot(contains('CourierTrackingMapView')));
-      expect(source, isNot(contains('courier_tracking_map_view.dart')));
-    },
-  );
+    expect(source, contains("label: const Text('تواصل')"));
+    expect(source, contains('onPressed: () => _showContactOptions(context)'));
+    expect(source, contains('onPressed: () => _openCustomerMap(context)'));
+    expect(source, contains("label: const Text('الخريطة')"));
+    expect(source, contains("Uri.https('www.google.com', '/maps/dir/'"));
+    expect(source, contains("'destination': query"));
+    expect(source, contains("'travelmode': 'driving'"));
+    expect(source, contains('_DeliveredTimeBadge'));
+    expect(source, contains("'وقت التسليم'"));
+    expect(source, isNot(contains('CourierTrackingMapView')));
+    expect(source, isNot(contains('courier_tracking_map_view.dart')));
+  });
 
   testWidgets('orders screen receives active orders without status filters', (
     WidgetTester tester,
@@ -609,12 +669,15 @@ void main() {
     expect(find.text('تم إسناد طلب جديد'), findsOneWidget);
   });
 
-  testWidgets('visible delete button removes a courier notification', (
+  testWidgets('swiping either direction removes courier notifications', (
     WidgetTester tester,
   ) async {
     final api = _FakeNotificationsApi(
-      notifications: [_notification(id: '1', orderId: '123')],
-      unreadCount: 1,
+      notifications: [
+        _notification(id: '1', orderId: '123'),
+        _notification(id: '2', orderId: '124'),
+      ],
+      unreadCount: 2,
     );
 
     await tester.pumpWidget(
@@ -630,13 +693,25 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    await tester.tap(
+    expect(
       find.byKey(const ValueKey('courier_notification_delete_1')),
+      findsNothing,
+    );
+    await tester.drag(
+      find.byKey(const ValueKey('courier_notification_1')),
+      const Offset(500, 0),
     );
     await tester.pumpAndSettle();
 
-    expect(api.deleteCalls, ['1']);
+    await tester.drag(
+      find.byKey(const ValueKey('courier_notification_2')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.deleteCalls, ['1', '2']);
     expect(find.byKey(const ValueKey('courier_notification_1')), findsNothing);
+    expect(find.byKey(const ValueKey('courier_notification_2')), findsNothing);
   });
 
   testWidgets('opening linked order loads the real courier order', (
@@ -839,6 +914,26 @@ void main() {
     expect(source, contains('order.deliveryProofUrl'));
     expect(source, contains('NetworkImageOrPlaceholder'));
     expect(source, contains('Image.memory'));
+  });
+
+  testWidgets('network image placeholder accepts unconstrained width', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: NetworkImageOrPlaceholder(
+            url: null,
+            placeholderAsset: AppAssets.defaultProduct,
+            width: double.infinity,
+            height: 160,
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(Image), findsOneWidget);
   });
 
   test('parses real auth/me courier profile response', () {

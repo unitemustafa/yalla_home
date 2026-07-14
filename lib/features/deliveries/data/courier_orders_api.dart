@@ -26,14 +26,29 @@ class CourierOrdersApi {
     return CourierOrder.fromJson(data as Map<String, dynamic>);
   }
 
-  Future<CourierOrder> markDelivered(String orderId, {String? note}) async {
+  Future<CourierOrder> markDelivered(
+    String orderId, {
+    String? note,
+    List<int>? proofBytes,
+    String? proofName,
+  }) async {
     final deliveryNote = note?.trim();
-    final data = await AuthSession.instance
-        .patchJson('courier/orders/$orderId/status/', {
-          'status': 'delivered',
-          if (deliveryNote != null && deliveryNote.isNotEmpty)
-            'delivery_note': deliveryNote,
-        });
+    final fields = <String, String>{
+      'status': 'delivered',
+      if (deliveryNote != null && deliveryNote.isNotEmpty)
+        'delivery_note': deliveryNote,
+    };
+    final data = proofBytes == null || proofName == null
+        ? await AuthSession.instance.patchJson(
+            'courier/orders/$orderId/status/',
+            fields,
+          )
+        : await AuthSession.instance.patchMultipart(
+            'courier/orders/$orderId/status/',
+            fields: fields,
+            proofBytes: proofBytes,
+            proofName: proofName,
+          );
     return CourierOrder.fromJson(data as Map<String, dynamic>);
   }
 }

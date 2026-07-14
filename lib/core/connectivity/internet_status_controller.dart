@@ -30,7 +30,7 @@ class InternetStatusController extends ChangeNotifier {
       onError: (_) => _setStatus(isOffline: false),
     );
     _verificationTimer = Timer.periodic(
-      const Duration(seconds: 12),
+      const Duration(seconds: 45),
       (_) => unawaited(refresh()),
     );
 

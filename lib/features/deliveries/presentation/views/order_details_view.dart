@@ -128,6 +128,29 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
     await launchUrl(uri);
   }
 
+  Future<void> _openCustomerMap(BuildContext context) async {
+    final location = _order.customerLocation;
+    final query = location == null
+        ? _order.mapQuery?.trim()
+        : '${location.latitude},${location.longitude}';
+    if (query == null || query.isEmpty) return;
+
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'destination': query,
+      'travelmode': 'driving',
+    });
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && context.mounted) {
+      _showMessage('تعذر فتح الخريطة على هذا الجهاز.');
+    }
+  }
+
+  bool get _hasMapDestination {
+    return _order.customerLocation != null ||
+        (_order.mapQuery?.trim().isNotEmpty ?? false);
+  }
+
   void _showContactOptions(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
@@ -181,7 +204,12 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
       final handler =
           widget.onDelivered ??
           (String orderId, DeliveryConfirmationResult result) {
-            return _api.markDelivered(orderId, note: result.note);
+            return _api.markDelivered(
+              orderId,
+              note: result.note,
+              proofBytes: result.proofBytes,
+              proofName: result.proofName,
+            );
           };
       final updated = await handler(_order.id, result);
       if (!mounted) return;
@@ -309,24 +337,27 @@ class _OrderDetailsViewState extends State<OrderDetailsView> {
                     _DeliveryProofCard(order: order, mutedColor: mutedColor),
                   ],
                   const SizedBox(height: 16),
-                  if (order.phone.isNotEmpty)
+                  if (order.phone.isNotEmpty || _hasMapDestination)
                     Row(
                       children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _showContactOptions(context),
-                            icon: const Icon(AppIcons.call, size: 18),
-                            label: const Text('تواصل'),
+                        if (order.phone.isNotEmpty)
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showContactOptions(context),
+                              icon: const Icon(AppIcons.call, size: 18),
+                              label: const Text('تواصل'),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: null,
-                            icon: const Icon(AppIcons.routing, size: 18),
-                            label: const Text('الخريطة'),
+                        if (order.phone.isNotEmpty && _hasMapDestination)
+                          const SizedBox(width: 10),
+                        if (_hasMapDestination)
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _openCustomerMap(context),
+                              icon: const Icon(AppIcons.routing, size: 18),
+                              label: const Text('الخريطة'),
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   if (order.canMarkPickedUp || order.canMarkDelivered) ...[
@@ -474,24 +505,103 @@ class _OrderHeader extends StatelessWidget {
             ),
           ),
           if (order.isDelivered)
-            Text(
-              _formatTime(order.deliveredAt),
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            _DeliveredTimeBadge(
+              value: order.deliveredAt,
+              accentColor: order.status.color,
+              mutedColor: mutedColor,
             ),
         ],
       ),
     );
   }
+}
 
-  String _formatTime(DateTime? value) {
-    if (value == null) return '---';
-    final day = value.day.toString().padLeft(2, '0');
-    final month = value.month.toString().padLeft(2, '0');
+class _DeliveredTimeBadge extends StatelessWidget {
+  const _DeliveredTimeBadge({
+    required this.value,
+    required this.accentColor,
+    required this.mutedColor,
+  });
+
+  final DateTime? value;
+  final Color accentColor;
+  final Color mutedColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = this.value;
+    final time = value == null ? '--:--' : _formatClock(value);
+    final date = value == null ? 'غير متاح' : _formatArabicDate(value);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: accentColor.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(AppIcons.calendar, size: 14, color: accentColor),
+              const SizedBox(width: 5),
+              Text(
+                'وقت التسليم',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: mutedColor,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text(
+              time,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+                height: 1,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            date,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: mutedColor,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatClock(DateTime value) {
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
-    return '$day/$month $hour:$minute';
+    return '$hour:$minute';
+  }
+
+  static String _formatArabicDate(DateTime value) {
+    const months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+    return '${value.day} ${months[value.month - 1]}';
   }
 }
 
@@ -790,7 +900,7 @@ class _DeliveryProofCard extends StatelessWidget {
               fit: BoxFit.cover,
               width: double.infinity,
               height: 160,
-              semanticLabel: 'صورة المنتج',
+              semanticLabel: 'صورة إثبات التسليم',
             ),
           )
         else

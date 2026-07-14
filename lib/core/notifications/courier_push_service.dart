@@ -68,6 +68,8 @@ class CourierPushService {
   StreamSubscription<RemoteMessage>? _openedSubscription;
   StreamSubscription<String>? _tokenSubscription;
   bool _initialized = false;
+  bool _firebaseReady = false;
+  bool _permissionRequested = false;
   bool _disablingAccount = false;
   Future<void> Function(Map<String, dynamic>)? _localShowOverride;
 
@@ -84,23 +86,13 @@ class CourierPushService {
     return pending;
   }
 
-  Future<void> initialize() async {
-    if (_initialized) return;
+  Future<bool> initialize() async {
+    if (_initialized) return _firebaseReady;
     _initialized = true;
     try {
       FirebaseMessaging.onBackgroundMessage(courierFirebaseBackgroundHandler);
       await Firebase.initializeApp();
       await _initializeLocalNotifications();
-      await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-      await _local
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.requestNotificationsPermission();
       _foregroundSubscription = FirebaseMessaging.onMessage.listen(
         (message) => unawaited(_handle(message, opened: false)),
       );
@@ -112,19 +104,51 @@ class CourierPushService {
       );
       final initial = await FirebaseMessaging.instance.getInitialMessage();
       if (initial != null) await _handle(initial, opened: true);
+      _firebaseReady = true;
+      return true;
     } catch (error, stackTrace) {
       _debugFailure('initialization', error, stackTrace);
+      _firebaseReady = false;
+      return false;
     }
   }
 
   Future<void> registerAuthenticatedDevice() async {
     if (AuthSession.instance.currentUser?['role'] != 'representative') return;
     try {
+      if (!await _ensureNotificationPermission()) return;
       final token = await FirebaseMessaging.instance.getToken();
       if (token != null && token.isNotEmpty) await _registerToken(token);
     } catch (error, stackTrace) {
       _debugFailure('device registration', error, stackTrace);
     }
+  }
+
+  Future<bool> _ensureNotificationPermission() async {
+    if (!_firebaseReady || _permissionRequested) {
+      if (!_firebaseReady) return false;
+      final current = await FirebaseMessaging.instance
+          .getNotificationSettings();
+      return _isNotificationPermissionGranted(current.authorizationStatus);
+    }
+
+    _permissionRequested = true;
+    final settings = await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    await _local
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
+    return _isNotificationPermissionGranted(settings.authorizationStatus);
+  }
+
+  bool _isNotificationPermissionGranted(AuthorizationStatus status) {
+    return status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
   }
 
   Future<void> _registerToken(String token) async {

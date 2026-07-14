@@ -144,43 +144,14 @@ class OrderCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  if (showDeliveredMeta) ...[
-                    Expanded(
-                      child: _OrderMeta(
-                        icon: AppIcons.tick_circle,
-                        label: 'وقت التسليم',
-                        value: _formatTime(order.deliveredAt),
-                        mutedColor: mutedColor,
-                        accentColor: order.status.color,
-                        isDark: isDark,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                  ],
-                  Expanded(
-                    child: _OrderMeta(
-                      icon: AppIcons.shopping_bag,
-                      label: 'المنتجات',
-                      value: '${order.itemCount}',
-                      mutedColor: mutedColor,
-                      accentColor: order.status.color,
-                      isDark: isDark,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _OrderMeta(
-                      icon: AppIcons.money_3,
-                      label: 'القيمة',
-                      value: AppCurrency.format(order.total),
-                      mutedColor: mutedColor,
-                      accentColor: order.status.color,
-                      isDark: isDark,
-                    ),
-                  ),
-                ],
+              _OrderMetaGrid(
+                showDeliveredMeta: showDeliveredMeta,
+                deliveredTime: _formatTime(order.deliveredAt),
+                itemCount: order.itemCount,
+                total: order.total,
+                mutedColor: mutedColor,
+                accentColor: order.status.color,
+                isDark: isDark,
               ),
             ],
           ),
@@ -196,6 +167,82 @@ class OrderCard extends StatelessWidget {
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '$day/$month $hour:$minute';
+  }
+}
+
+class _OrderMetaGrid extends StatelessWidget {
+  const _OrderMetaGrid({
+    required this.showDeliveredMeta,
+    required this.deliveredTime,
+    required this.itemCount,
+    required this.total,
+    required this.mutedColor,
+    required this.accentColor,
+    required this.isDark,
+  });
+
+  final bool showDeliveredMeta;
+  final String deliveredTime;
+  final int itemCount;
+  final num total;
+  final Color mutedColor;
+  final Color accentColor;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <Widget>[
+      if (showDeliveredMeta)
+        _OrderMeta(
+          icon: AppIcons.tick_circle,
+          label: 'وقت التسليم',
+          value: deliveredTime,
+          mutedColor: mutedColor,
+          accentColor: accentColor,
+          isDark: isDark,
+        ),
+      _OrderMeta(
+        icon: AppIcons.shopping_bag,
+        label: 'المنتجات',
+        value: '$itemCount',
+        mutedColor: mutedColor,
+        accentColor: accentColor,
+        isDark: isDark,
+      ),
+      _OrderMeta(
+        icon: AppIcons.money_3,
+        label: 'القيمة',
+        value: AppCurrency.format(total),
+        mutedColor: mutedColor,
+        accentColor: accentColor,
+        isDark: isDark,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useTwoColumns = showDeliveredMeta && constraints.maxWidth < 380;
+        final columnCount = useTwoColumns ? 2 : items.length;
+        const spacing = 10.0;
+        final itemWidth =
+            (constraints.maxWidth - (spacing * (columnCount - 1))) /
+            columnCount;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (var index = 0; index < items.length; index++)
+              SizedBox(
+                width: useTwoColumns && index == items.length - 1
+                    ? constraints.maxWidth
+                    : itemWidth,
+                child: items[index],
+              ),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -262,7 +309,7 @@ class _OrderMeta extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: mutedColor,
@@ -270,13 +317,16 @@ class _OrderMeta extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w900),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
               ],
             ),
