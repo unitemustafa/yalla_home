@@ -38,6 +38,46 @@ void main() {
   });
 
   test(
+    'login exposes 429 code and Retry-After without creating a session',
+    () async {
+      final store = InMemoryAuthTokenStore();
+      final session = AuthSession.forTesting(
+        tokenStore: store,
+        now: () => base,
+        client: MockClient(
+          (_) async => _response(
+            {
+              'code': 'rate_limited',
+              'detail': 'Too many requests. Try again later.',
+            },
+            statusCode: 429,
+            headers: const {'retry-after': '12'},
+          ),
+        ),
+      );
+      addTearDown(session.disposeForTesting);
+
+      await expectLater(
+        session.login(
+          identifier: 'captain@example.com',
+          password: 'Secret123!',
+          remember: false,
+        ),
+        throwsA(
+          isA<ApiException>()
+              .having((error) => error.code, 'code', 'rate_limited')
+              .having(
+                (error) => error.retryAfterSeconds,
+                'retryAfterSeconds',
+                12,
+              ),
+        ),
+      );
+      expect(store.tokens, isNull);
+    },
+  );
+
+  test(
     'proactively refreshes and atomically stores both rotated tokens',
     () async {
       final store = InMemoryAuthTokenStore();
@@ -91,6 +131,59 @@ void main() {
       expect(store.saveCount, 2);
     },
   );
+
+  test('429 refresh waits once, retries, and preserves the session', () async {
+    final store = InMemoryAuthTokenStore();
+    final delays = <Duration>[];
+    var refreshRequests = 0;
+    final session = AuthSession.forTesting(
+      tokenStore: store,
+      now: () => base,
+      delay: (duration) async => delays.add(duration),
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/login/representative/')) {
+          return _response(
+            _payload(
+              base,
+              remembered: false,
+              accessExpiresAt: base.add(const Duration(seconds: 30)),
+            ),
+          );
+        }
+        if (request.url.path.endsWith('/refresh/')) {
+          refreshRequests += 1;
+          if (refreshRequests == 1) {
+            return _response({
+              'code': 'rate_limited',
+              'retry_after_seconds': 2,
+            }, statusCode: 429);
+          }
+          return _response(
+            _payload(
+              base,
+              remembered: false,
+              accessToken: 'access-rotated',
+              refreshToken: 'refresh-rotated',
+            ),
+          );
+        }
+        return _response({'ok': true});
+      }),
+    );
+    addTearDown(session.disposeForTesting);
+
+    await session.login(
+      identifier: 'captain@example.com',
+      password: 'Secret123!',
+      remember: false,
+    );
+    final result = await session.getJson('courier/orders/');
+
+    expect(result['ok'], isTrue);
+    expect(refreshRequests, 2);
+    expect(delays, [const Duration(seconds: 2)]);
+    expect(store.tokens?.accessToken, 'access-rotated');
+  });
 
   test('concurrent requests share one refresh operation', () async {
     final store = InMemoryAuthTokenStore();
@@ -576,10 +669,14 @@ Map<String, dynamic> _payload(
   };
 }
 
-http.Response _response(Object body, {int statusCode = 200}) {
+http.Response _response(
+  Object body, {
+  int statusCode = 200,
+  Map<String, String> headers = const {},
+}) {
   return http.Response(
     jsonEncode(body),
     statusCode,
-    headers: const {'content-type': 'application/json'},
+    headers: {'content-type': 'application/json', ...headers},
   );
 }

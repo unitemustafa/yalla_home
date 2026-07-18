@@ -14,6 +14,7 @@ enum AuthRestoreResult { restored, noSession, expired, temporaryFailure }
 typedef AuthNow = DateTime Function();
 typedef AuthTimerFactory =
     Timer Function(Duration duration, void Function() callback);
+typedef AuthDelay = Future<void> Function(Duration duration);
 
 class AuthSession {
   AuthSession._({
@@ -21,12 +22,14 @@ class AuthSession {
     AuthTokenStore? tokenStore,
     AuthNow? now,
     AuthTimerFactory? timerFactory,
+    AuthDelay? delay,
     Duration requestTimeout = const Duration(seconds: 20),
     String? baseUrl,
   }) : _client = client ?? http.Client(),
        _tokenStore = tokenStore ?? SecureAuthTokenStore(),
        _now = now ?? DateTime.now,
        _timerFactory = timerFactory ?? _createTimer,
+       _delay = delay ?? ((duration) => Future<void>.delayed(duration)),
        _requestTimeout = requestTimeout,
        _baseUrlOverride = baseUrl;
 
@@ -40,6 +43,7 @@ class AuthSession {
     required AuthTokenStore tokenStore,
     AuthNow? now,
     AuthTimerFactory? timerFactory,
+    AuthDelay? delay,
     Duration requestTimeout = const Duration(seconds: 20),
     String baseUrl = 'http://localhost/api/v1',
   }) {
@@ -48,6 +52,7 @@ class AuthSession {
       tokenStore: tokenStore,
       now: now,
       timerFactory: timerFactory,
+      delay: delay,
       requestTimeout: requestTimeout,
       baseUrl: baseUrl,
     );
@@ -84,6 +89,7 @@ class AuthSession {
   final AuthTokenStore _tokenStore;
   final AuthNow _now;
   final AuthTimerFactory _timerFactory;
+  final AuthDelay _delay;
   final Duration _requestTimeout;
   final String? _baseUrlOverride;
 
@@ -172,12 +178,10 @@ class AuthSession {
     _accountInactiveHandled = false;
     await _handleAccountInactiveResponse(data, notify: false);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _message(
-          data,
-          '\u062a\u0639\u0630\u0631 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644.',
-        ),
-        statusCode: response.statusCode,
+      throw _responseException(
+        response,
+        data,
+        '\u062a\u0639\u0630\u0631 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644.',
       );
     }
 
@@ -215,12 +219,10 @@ class AuthSession {
     );
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _message(
-          data,
-          '\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a.',
-        ),
-        statusCode: response.statusCode,
+      throw _responseException(
+        response,
+        data,
+        '\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a.',
       );
     }
     return data;
@@ -233,12 +235,10 @@ class AuthSession {
     );
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _message(
-          data,
-          '\u062a\u0639\u0630\u0631 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628.',
-        ),
-        statusCode: response.statusCode,
+      throw _responseException(
+        response,
+        data,
+        '\u062a\u0639\u0630\u0631 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628.',
       );
     }
     return data;
@@ -251,12 +251,10 @@ class AuthSession {
     );
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _message(
-          data,
-          '\u062a\u0639\u0630\u0631 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0637\u0644\u0628.',
-        ),
-        statusCode: response.statusCode,
+      throw _responseException(
+        response,
+        data,
+        '\u062a\u0639\u0630\u0631 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0637\u0644\u0628.',
       );
     }
     return data;
@@ -269,12 +267,10 @@ class AuthSession {
     );
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _message(
-          data,
-          '\u062a\u0639\u0630\u0631 \u062d\u0630\u0641 \u0627\u0644\u0639\u0646\u0635\u0631.',
-        ),
-        statusCode: response.statusCode,
+      throw _responseException(
+        response,
+        data,
+        '\u062a\u0639\u0630\u0631 \u062d\u0630\u0641 \u0627\u0644\u0639\u0646\u0635\u0631.',
       );
     }
     return data;
@@ -316,12 +312,10 @@ class AuthSession {
     final data = _decode(response);
     await _handleAccountInactiveResponse(data);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _message(
-          data,
-          '\u062a\u0639\u0630\u0631 \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u062a\u0633\u0644\u064a\u0645.',
-        ),
-        statusCode: response.statusCode,
+      throw _responseException(
+        response,
+        data,
+        '\u062a\u0639\u0630\u0631 \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u062a\u0633\u0644\u064a\u0645.',
       );
     }
     return data;
@@ -377,12 +371,10 @@ class AuthSession {
     final response = await _authorizedGet('auth/me/');
     final data = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _message(
-          data,
-          '\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062d\u0633\u0627\u0628.',
-        ),
-        statusCode: response.statusCode,
+      throw _responseException(
+        response,
+        data,
+        '\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062d\u0633\u0627\u0628.',
       );
     }
     if (data is Map<String, dynamic>) return data;
@@ -523,25 +515,36 @@ class AuthSession {
       );
     }
 
-    final response = await _withRequestTimeout(
+    Future<http.Response> sendRefresh() => _withRequestTimeout(
       _client.post(
         uri('auth/refresh/'),
         headers: const {'Content-Type': 'application/json'},
         body: jsonEncode({'refreshToken': refresh}),
       ),
     );
-    final data = _decode(response);
+
+    var response = await sendRefresh();
+    var data = _decode(response);
+    if (response.statusCode == 429) {
+      final retryAfter = _retryAfterSeconds(response, data) ?? 1;
+      await _delay(Duration(seconds: retryAfter.clamp(1, 60).toInt()));
+      if (refreshVersion != _sessionVersion || _isSessionExpired()) {
+        throw const ApiException(
+          '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
+        );
+      }
+      response = await sendRefresh();
+      data = _decode(response);
+    }
     await _handleAccountInactiveResponse(data);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       if (_isPasswordChangedResponse(data)) {
         throw const ApiException(_passwordChangedMessage, statusCode: 401);
       }
-      throw ApiException(
-        _message(
-          data,
-          '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
-        ),
-        statusCode: response.statusCode,
+      throw _responseException(
+        response,
+        data,
+        '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
       );
     }
 
@@ -739,6 +742,30 @@ class AuthSession {
     return _localizedMessage(fallback);
   }
 
+  ApiException _responseException(
+    http.Response response,
+    dynamic data,
+    String fallback,
+  ) {
+    return ApiException(
+      _message(data, fallback),
+      statusCode: response.statusCode,
+      code: data is Map ? data['code']?.toString() : null,
+      retryAfterSeconds: _retryAfterSeconds(response, data),
+    );
+  }
+
+  int? _retryAfterSeconds(http.Response response, dynamic data) {
+    if (data is Map) {
+      final value = data['retry_after_seconds'];
+      if (value is num && value > 0) return value.ceil();
+      final parsed = int.tryParse(value?.toString() ?? '');
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    final parsed = int.tryParse(response.headers['retry-after'] ?? '');
+    return parsed != null && parsed > 0 ? parsed : null;
+  }
+
   String _localizedMessage(String message) {
     final normalized = message.trim().toLowerCase();
     if (normalized.contains('invalid email or password')) {
@@ -776,6 +803,7 @@ class AuthSession {
         '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
       'token_not_valid' =>
         '\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629.',
+      'rate_limited' => 'طلبات كتير في وقت قصير. استنى شوية وحاول تاني.',
       _ => code,
     };
   }
