@@ -2,7 +2,7 @@ name: yalla_home
 description: "Yalla Home delivery app."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.11.4
@@ -41,11 +41,10 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/logos/yallahome_blacklogo.png
-    - assets/logos/yallahome_whitelogo.png
-    - assets/images/placeholders/default_courier.png
-    - assets/images/placeholders/default_product.png
-    - assets/images/placeholders/default_user_avatar.png
+    - assets/logos/yallahome_logo.webp
+    - assets/images/placeholders/default_courier.webp
+    - assets/images/placeholders/default_product.webp
+    - assets/images/placeholders/default_user_avatar.webp
 
   fonts:
     - family: Cairo
