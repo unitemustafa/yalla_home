@@ -15,6 +15,9 @@ val hasReleaseKeystore = keystorePropertiesFile.exists()
 val requestedReleaseBuild = gradle.startParameter.taskNames.any {
     it.contains("release", ignoreCase = true)
 }
+val allowLocalCleartext = providers.gradleProperty("LOCAL_TEST_RELEASE")
+    .map { it.toBoolean() }
+    .orElse(false)
 
 if (requestedReleaseBuild && !hasReleaseKeystore) {
     throw GradleException(
@@ -47,6 +50,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["USES_CLEARTEXT_TRAFFIC"] = allowLocalCleartext.get().toString()
     }
 
     signingConfigs {

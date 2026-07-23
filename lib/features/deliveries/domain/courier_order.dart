@@ -131,6 +131,8 @@ class CourierOrder {
     required this.marketBranch,
     required this.marketCount,
     required this.marketSummary,
+    this.fulfillmentType = '',
+    this.externalShippingStatus = '',
     this.addressLabel,
     this.serviceCityName,
     this.deliveryAreaName,
@@ -161,6 +163,8 @@ class CourierOrder {
   final String marketBranch;
   final int marketCount;
   final String marketSummary;
+  final String fulfillmentType;
+  final String externalShippingStatus;
   final String? addressLabel;
   final String? serviceCityName;
   final String? deliveryAreaName;
@@ -192,6 +196,15 @@ class CourierOrder {
     final items = itemsJson.map(_itemFromJson).toList();
     final label = _clean(address?['name']);
     final details = _clean(address?['details']);
+    final formattedFromMap = _clean(address?['formatted_address']);
+    final street = _clean(address?['street']);
+    final building = _clean(address?['building_name']);
+    final apartment = _clean(address?['apartment_number']);
+    final floor = _clean(address?['floor']);
+    final company = _clean(address?['company_name']);
+    final recipientName = _clean(address?['recipient_name']);
+    final recipientPhone = _clean(address?['recipient_phone']);
+    final additionalInstructions = _clean(address?['additional_instructions']);
     final manualArea = _clean(address?['manual_area']);
     final manualCity = _clean(address?['manual_city']);
     final areaName =
@@ -199,6 +212,12 @@ class CourierOrder {
     final cityName =
         _clean(addressServiceCity?['name']) ?? _clean(serviceCity?['name']);
     final formattedAddress = _joinUnique([
+      formattedFromMap,
+      street,
+      building == null ? null : 'مبنى $building',
+      floor == null ? null : 'الدور $floor',
+      apartment == null ? null : 'شقة $apartment',
+      company,
       details,
       manualArea,
       manualCity,
@@ -220,13 +239,14 @@ class CourierOrder {
     return CourierOrder(
       id: json['id'].toString(),
       customerName:
+          recipientName ??
           _clean(customer?['name']) ??
           _joinUnique([
             _clean(customer?['first_name']),
             _clean(customer?['last_name']),
           ]) ??
           'عميل',
-      phone: _clean(customer?['phone']) ?? '',
+      phone: recipientPhone ?? _clean(customer?['phone']) ?? '',
       address:
           formattedAddress ??
           label ??
@@ -240,7 +260,9 @@ class CourierOrder {
       status: status,
       rawStatus: rawStatus,
       createdAt: createdAt,
-      expectedDeliveryAt: assignedAt.add(const Duration(hours: 1)),
+      expectedDeliveryAt: assignedAt.add(
+        Duration(minutes: _int(json['eta_max_minutes'], fallback: 60)),
+      ),
       items: items,
       itemsCount: _int(
         json['items_count'],
@@ -255,6 +277,8 @@ class CourierOrder {
         count: marketCount,
         namesSummary: marketNamesSummary,
       ),
+      fulfillmentType: _clean(json['fulfillment_type']) ?? '',
+      externalShippingStatus: _clean(json['external_shipping_status']) ?? '',
       serviceCityName: cityName,
       deliveryAreaName: areaName,
       customerAvatarUrl: AuthSession.instance.absoluteUrl(
@@ -264,7 +288,10 @@ class CourierOrder {
       customerLocation: hasCustomerLocation
           ? OrderLocation(latitude: latitude, longitude: longitude)
           : null,
-      customerNotes: _clean(json['description']),
+      customerNotes: _joinUnique([
+        additionalInstructions,
+        _clean(json['description']),
+      ]),
       deliveredAt: deliveredAt,
       deliveryNote: _clean(json['delivery_note']),
       deliveryProofUrl: AuthSession.instance.absoluteUrl(
@@ -313,6 +340,8 @@ class CourierOrder {
       marketBranch: marketBranch,
       marketCount: marketCount,
       marketSummary: marketSummary,
+      fulfillmentType: fulfillmentType,
+      externalShippingStatus: externalShippingStatus,
       addressLabel: addressLabel,
       serviceCityName: serviceCityName,
       deliveryAreaName: deliveryAreaName,
